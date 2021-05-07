@@ -33,6 +33,12 @@ You can skip this update by entering the number 3 in the console.
 
 If you are running the package from an R console, you will need to set an R environment variable to suppress warnings from appearing as errors with ```Sys.setenv(R_REMOTES_NO_ERRORS_FROM_WARNINGS="true")```
 
+Finally, to install any remaining dependecies, run the following:
+```{r, eval=FALSE}
+renv::restore()
+```
+This will install specific versions of packages needed to run the reports.
+
 ## Step 2
 
 Now that the `chordsTables` package is downloaded and installed you can use the `run_report()` function to generate the report.  This function takes one argument that you must provide.  The argument indicates which report you want to generate.  The options include `"P1"` or `"P2"` indicating which priority table the user wants.  The arguments must be entered exactly as shown above, including the quotation marks, uppercase P, and no spacing between the P and the number.  If you don't enter one of those option, a warning message will be printed in the Console indicating as such.  To execute this function run the following code in RStudio (NOTE: `"P1"` is used as an example here.  Change the argument to the value you want):
