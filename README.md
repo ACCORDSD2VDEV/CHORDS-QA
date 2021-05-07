@@ -13,7 +13,7 @@ Use of this package assumes you have have downloaded and installed R and RStudio
 
 ## Step 1
 
-In order to download and install the `chordsTables` package you will need to install the `devtools` an `renv` packages to install the package from github.  If you don't have those packages (which is likely true for most users), you can use the following code to install it:
+In order to download and install the `chordsTables` package you will need to install the `devtools` and `renv` packages to install the package from github.  If you don't have those packages (which is likely true for most users), you can use the following code to install it:
 
 ```{r, eval=FALSE}
 install.packages("devtools")
