@@ -42,7 +42,7 @@ library(dplyr)
 knitr::opts_chunk$set(echo = FALSE,
                 message = FALSE,
                 warning = FALSE,
-                error= TRUE,
+                error= FALSE,
                 time_it = TRUE,
                 capture_sql_error = TRUE)
 
