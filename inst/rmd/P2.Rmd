@@ -51,23 +51,58 @@ knitr::opts_chunk$set(echo = TRUE,
                 message = FALSE,
                 warning = FALSE,
                 error = TRUE,
-                time_it = TRUE)
+                time_it = TRUE,
+                capture_error = TRUE)
 startTime <- Sys.time()
+queryError <- NULL
 
 all_times <- list()
 knitr::knit_hooks$set(time_it = local({
   now <- NULL
   function(before, options) {
     if (before) {
-      now <<- Sys.time()
+      chunkBeforeTime <<- Sys.time()
+      message("Chunk '", options$label, "' Start Time: ", format(chunkBeforeTime), sep='')
     } else {
-      res <- difftime(Sys.time(), now)
-  
+      chunkEndTime <- Sys.time()
+      res <- difftime(chunkEndTime, chunkBeforeTime)
+      
+      message("Chunk '", options$label, "' End Time: ", format(chunkEndTime))
+      
+      chunkDurationMessage <- paste("Duration for chunk '", options$label, "' to run: ", format(round(res, 3)), sep = '')
+      
+      message(chunkDurationMessage)
+      message("Report Cumulative Runtime: ", format(round(difftime(chunkEndTime, startTime), 3)), sep='')
+      
       all_times[[options$label]] <<- c(options$label, format(round(res, 3)))
       
-      #Only prints times greater than 5 minutes.  
+      #Only prints times greater than 5 minutes into the report.
       if(res > as.difftime("00:05", format="%H:%M")){
-        paste("Time for the chunk", options$label, "to run:", format(round(res, 3)))
+        chunkDurationMessage
+      }
+    }
+  }
+}))
+
+knitr::knit_hooks$set(capture_error = local({
+  function(before, options) {
+    if (before) {
+      queryError <- NULL
+    } else {
+      if(!is.null(queryError)){
+        paste("Query Error: ", queryError)
+      }
+    }
+  }
+}))
+
+knitr::knit_hooks$set(capture_error = local({
+  function(before, options) {
+    if (before) {
+      queryError <- NULL
+    } else {
+      if(!is.null(queryError)){
+        paste("Query Error: ", queryError)
       }
     }
   }

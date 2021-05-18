@@ -29,6 +29,10 @@
 #' @export
 
 run_report <- function(priority, dbserver = NULL, dbname = NULL, dbuser = NULL, dbpassword = NULL, outputdir = NULL, batchmode = FALSE, dbport = NULL, dbencrypt = NULL, ...) {
+  if(!rmarkdown::pandoc_version() >= "1.12.3"){
+    stop("Pandoc version 1.12.3  or higher is required.\r\nPlease visit https://www.pandoc.org/installing to install this program before running a CHORDS QA request")
+  }
+
   time_id <- format(Sys.time(), "%Y%m%d_%H%M")
   if(length(dbuser) == 0 || is.null(dbuser)){
     dbuser <- ""

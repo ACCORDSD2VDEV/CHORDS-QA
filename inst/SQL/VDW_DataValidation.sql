@@ -437,16 +437,17 @@ INSERT INTO #ENCTYPE_LU(
 	ABBREVIATION,
 	DESCRIPTION )
 VALUES(
-	   'IP', 'Acute Inpatient Hospital Stay: Inpatient stays, same-day hospital discharges, hospital transfers where the patient was admitted into the hospital. Includes acute inpatient psych and detox hospital stays. [ENCOUNTER_SUBTYPE = AI]' ), (
-	   'ED', 'Emergency Department Encounter: Excludes urgent care visits. [ENCOUNTER_SUBTYPE = HA,OC]' ), (
-	   'AV', 'Ambulatory Visit: Outpatient clinics, same day surgeries, observation beds, urgent care visits, and other same-day ambulatory hospital encounters. Excludes emergency department encounters). [ENCOUNTER_SUBTYPE = OC, OB, SD, HA, UC, RH, DI, OT]' ), (
-	   'TE', 'Telephone Encounters: [ENCOUNTER_SUBTYPE = OT, HH]' ), (
-	   'EM', 'E-mail Encounters: [ENCOUNTER_SUBTYPE = OT, HH]' ), (
-	   'IS', 'Non-Acute Institutional Stays: Hospice, SNF, rehab, nursing home, residential, overnight non-hospital dialysis and other non-hospital stays. [ENCOUNTER_SUBTYPE = HS, SN, NH, RH,DI, OT]' ), (
-	   'OE', 'OE=Other Encounters (not overnight): Hospice visits, home health visits, SNF visits, other non-hospital visits. [ENCOUNTER_SUBTYPE = HS, HH, SN, RH, DI, OT]' ), (
-	   'LO', 'Lab Only Encounter: Optional. Lab encounters that cannot be matched to another encounter. Include to link variables from ENCOUNTER table to the PROCEDURES table. [ENCOUNTER_SUBTYPE = OC,OT]' ), (
-	   'RO', 'Radiology Only Encounter: Optional. Radiology encounter that cannot be matched to another encounter. Include to link variables from utilization file to procedure file. [ENCOUNTER_SUBTYPE = OC,OT]' );
-
+		   'IP', 'Acute Inpatient Hospital Stay: Inpatient stays, same-day hospital discharges, hospital transfers where the patient was admitted into the hospital. Includes acute inpatient psych and detox hospital stays. [ENCOUNTER_SUBTYPE = AI]' ), ( 
+		   'ED', 'Emergency Department Encounter: Excludes urgent care visits. [ENCOUNTER_SUBTYPE = HA,OC]' ), ( 
+		   'AV', 'Ambulatory Visit: Outpatient clinics, same day surgeries, observation beds, urgent care visits, and other same-day ambulatory hospital encounters. Excludes emergency department encounters). [ENCOUNTER_SUBTYPE = OC, OB, SD, HA, UC, RH, DI, OT]' ), ( 
+		   'EM', 'E-mail Encounters, now including all asynchronous electronic communication (includes email and portal messaging)' ), ( 
+		   'TE', 'Telephone Encounters, now including all synchronous audio-only communication (including telephone calls)' ), ( 
+		   'TV', 'Telehealth Encounter with synchronous audio and video' ), ( 
+		   'TO', 'All other synchronous Telehealth Encounters that do not fit in other telehealth encounter types.' ), ( 
+		   'IS', 'Non-Acute Institutional Stays: Hospice, SNF, rehab, nursing home, residential, overnight non-hospital dialysis and other non-hospital stays. [ENCOUNTER_SUBTYPE = HS, SN, NH, RH,DI, OT]' ), ( 
+		   'OE', 'OE=Other Encounters (not overnight): Hospice visits, home health visits, SNF visits, other non-hospital visits. [ENCOUNTER_SUBTYPE = HS, HH, SN, RH, DI, OT]' ), ( 
+		   'LO', 'Lab Only Encounter: Optional. Lab encounters that cannot be matched to another encounter. Include to link variables from ENCOUNTER table to the PROCEDURES table. [ENCOUNTER_SUBTYPE = OC,OT]' ), ( 
+		   'RO', 'Radiology Only Encounter: Optional. Radiology encounter that cannot be matched to another encounter. Include to link variables from utilization file to procedure file. [ENCOUNTER_SUBTYPE = OC,OT]' );
 CREATE TABLE #ENROLLMENT_BASIS_LU
 (
 	ABBREVIATION nchar NOT NULL,
@@ -2062,7 +2063,7 @@ SELECT
 FROM
      #dataintegvalidation;
 
-WHILE @counter < @max
+WHILE @counter <= @max
     BEGIN
 	   SELECT @TargetTable = TargetTable from #dataintegvalidation where PK = @counter;
 	   SELECT  @TargetColumn = TargetColumn from #dataintegvalidation where PK = @counter;
@@ -2130,7 +2131,7 @@ SELECT
 FROM
      #datavaluevalidation;
 
-WHILE @counter < @max
+WHILE @counter <= @max
     BEGIN
 	   SELECT @TargetTable = TargetTable from #datavaluevalidation where PK = @counter;
 	   SELECT  @TargetColumn = TargetColumn from #datavaluevalidation where PK = @counter;

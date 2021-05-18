@@ -55,24 +55,59 @@ knitr::opts_chunk$set(echo = TRUE,
                 message = FALSE,
                 warning = FALSE,
                 error = TRUE,
-                time_it = TRUE)
+                time_it = TRUE,
+                capture_error = TRUE)
 
 startTime <- Sys.time()
+queryError <- NULL
 
 all_times <- list()
 knitr::knit_hooks$set(time_it = local({
   now <- NULL
   function(before, options) {
     if (before) {
-      now <<- Sys.time()
+      chunkBeforeTime <<- Sys.time()
+      message("Chunk '", options$label, "' Start Time: ", format(chunkBeforeTime), sep='')
     } else {
-      res <- difftime(Sys.time(), now)
-  
+      chunkEndTime <- Sys.time()
+      res <- difftime(chunkEndTime, chunkBeforeTime)
+      
+      message("Chunk '", options$label, "' End Time: ", format(chunkEndTime))
+      
+      chunkDurationMessage <- paste("Duration for chunk '", options$label, "' to run: ", format(round(res, 3)), sep = '')
+      
+      message(chunkDurationMessage)
+      message("Report Cumulative Runtime: ", format(round(difftime(chunkEndTime, startTime), 3)), sep='')
+      
       all_times[[options$label]] <<- c(options$label, format(round(res, 3)))
       
-      #Only prints times greater than 5 minutes.  
+      #Only prints times greater than 5 minutes into the report.
       if(res > as.difftime("00:05", format="%H:%M")){
-        paste("Time for the chunk", options$label, "to run:", format(round(res, 3)))
+        chunkDurationMessage
+      }
+    }
+  }
+}))
+
+knitr::knit_hooks$set(capture_error = local({
+  function(before, options) {
+    if (before) {
+      queryError <- NULL
+    } else {
+      if(!is.null(queryError)){
+        paste("Query Error: ", queryError)
+      }
+    }
+  }
+}))
+
+knitr::knit_hooks$set(capture_error = local({
+  function(before, options) {
+    if (before) {
+      queryError <- NULL
+    } else {
+      if(!is.null(queryError)){
+        paste("Query Error: ", queryError)
       }
     }
   }
@@ -454,11 +489,12 @@ primLang <- demogCounts %>%
             mutate(langTot = sum(langCnt), 
                   langPct = round(100*langCnt/langTot,1)
                   )
+isoLang <- isoLang %>% mutate(code3B = toupper(code3B))
 
+primLang <- primLang %>% mutate(primary_language = toupper(primary_language))
 primLang <- within(merge(primLang,isoLang[c('code3B','InEnglish')],by.x='primary_language', by.y='code3B', all.x=T) %>% arrange(desc(langPct)) ,{
     InEnglish <- ifelse(!is.na(InEnglish),InEnglish, ifelse(is.na(primary_language) , 'Missing', 'Invalid'))
 })
-
 ```
 
 ```{r tab4_disp, echo = F, include=T}
@@ -471,16 +507,16 @@ knitr::kable(primLang[1:5, c('primary_language', 'InEnglish','langCnt','langPct'
 ## Table 4.1. Other and Unknown Language Count 
 
 ```{r other/missing primary language, echo = F, include=T}
-unkLang <- subset(primLang, primary_language %in% c("unk","oth", "und"))
+unkLang <- subset(primLang, primary_language %in% c("UNK","OTH", "UND"))
 
 #Total other/unknown
 
 #total row
 rownames(unkLang) <- unkLang$primary_language
 unkLang$InEnglish <- NULL
-unkLang$InEnglish[unkLang$primary_language == "unk"] = "Unknown"
-unkLang$InEnglish[unkLang$primary_language == "oth"] = "Other"
-unkLang$InEnglish[unkLang$primary_language == "und"] = "Undetermined"
+unkLang$InEnglish[unkLang$primary_language == "UNK"] = "Unknown"
+unkLang$InEnglish[unkLang$primary_language == "OTH"] = "Other"
+unkLang$InEnglish[unkLang$primary_language == "UND"] = "Undetermined"
 
 unkLangRowsNames <- as.vector(unkLang$InEnglish)
 
@@ -2535,7 +2571,7 @@ kable(tab9_all, col.names = c("Year", "Total Number of Recorded Encounters", "Pe
 
 ```{r encounter types by year and month, echo = F, include=T}
 encEncType_YM  <- sqlQuery(tempCon3,
-                 paste0("SELECT aMon, aYear, encType, count(*) as rowCnt
+                 paste0("SELECT aMon, aYear, upper(encType) encType, count(*) as rowCnt
                         FROM #encTmp
                         GROUP BY aMon, aYear, encType",
                        sep=" "
@@ -2712,7 +2748,7 @@ lastLocation <- merge(lastLocation, stateCnty[c('stateCnty','stCntyNm')], by = '
 ```
 
 ```{r tab11_disp, echo = F, include=T}
-coloradoLoc <- subset(lastLocation, stCntyNm != "Invalid" & stCntyNm != "Missing")
+coloradoLoc <- subset(lastLocation, stCntyNm != "Invalid" & stCntyNm != "Missing" & substr(stCntyNm, 1, 2) == '08')
 
 nonColoradoLoc <- subset(lastLocation, stCntyNm == "Invalid")
 missingLoc <- subset(lastLocation, stCntyNm == "Missing")
@@ -2890,7 +2926,7 @@ tab14_09 <- run_query(
       order by nrows_all DESC"), as.is = c(TRUE, TRUE, FALSE, FALSE))
 tab14_10 <- run_query( 
   paste0("select top 10 dx,
-    cast(dx_codetype as varchar) as dx_codetype,
+    UPPER(cast(dx_codetype as varchar)) as dx_codetype,
     count(*) as nrows_all,
     count(distinct person_id) as npats
 	  from ", diagnoses, "
@@ -2931,7 +2967,7 @@ if (nrow(tab14_10) != 0){
 
 ```{r monthly counts by enc type, echo = F, include=T}
 dxByMonEncTp <- run_query(
-                      paste0("SELECT YEAR(adate) as year, MONTH(adate) as month, encType, count(*) as Freq
+                      paste0("SELECT YEAR(adate) as year, MONTH(adate) as month, UPPER(encType) encType, count(*) as Freq
 	                            from ", diagnoses, "
                              WHERE YEAR(adate) >= 2005
                              AND DX_ORIGIN in ('BI')

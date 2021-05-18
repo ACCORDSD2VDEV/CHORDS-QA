@@ -43,23 +43,48 @@ knitr::opts_chunk$set(echo = FALSE,
                 message = FALSE,
                 warning = FALSE,
                 error= TRUE,
-                time_it = TRUE)
+                time_it = TRUE,
+                capture_sql_error = TRUE)
+
 startTime <- Sys.time()
+queryError <- NULL
 
 all_times <- list()
 knitr::knit_hooks$set(time_it = local({
   now <- NULL
   function(before, options) {
     if (before) {
-      now <<- Sys.time()
+      chunkBeforeTime <<- Sys.time()
+      message("Chunk '", options$label, "' Start Time: ", format(chunkBeforeTime), sep='')
     } else {
-      res <- difftime(Sys.time(), now)
-  
+      chunkEndTime <- Sys.time()
+      res <- difftime(chunkEndTime, chunkBeforeTime)
+      
+      message("Chunk '", options$label, "' End Time: ", format(chunkEndTime))
+      
+      chunkDurationMessage <- paste("Duration for chunk '", options$label, "' to run: ", format(round(res, 3)), sep = '')
+      
+      message(chunkDurationMessage)
+      message("Report Cumulative Runtime: ", format(round(difftime(chunkEndTime, startTime), 3)), sep='')
+      
       all_times[[options$label]] <<- c(options$label, format(round(res, 3)))
       
-      #Only prints times greater than 5 minutes.  
+      #Only prints times greater than 5 minutes into the report.
       if(res > as.difftime("00:05", format="%H:%M")){
-        paste("Time for the chunk", options$label, "to run:", format(round(res, 3)))
+        chunkDurationMessage
+      }
+    }
+  }
+}))
+
+knitr::knit_hooks$set(capture_sql_error = local({
+  function(before, options) {
+    if (before) {
+      queryError <- NULL
+    } else {
+      if(!is.null(queryError)){
+        paste("Sql Query Error: ", queryError)
+        message(queryError)
       }
     }
   }
@@ -906,8 +931,6 @@ if (params$QAAlert == TRUE){
 ```
  
 ```{r 2.01, echo = F, include=T, error=T}
-# DC 2.01
-
 tabDates <- run_query("
 SELECT DISTINCT 
        case 
@@ -940,18 +963,8 @@ WHERE a.type IN('U', 'V')")
 futureDateCode <- merge(tabDates, modDates, by.x='tabname', by.y='name') %>%
   within({
     sqlcode <- paste0("
-                      select '",tabname, "' as tableName, '", colname,"' as dateName ,count(*) as nrows, sum(case when a.",colname,">b.modify_date then 1 else 0 end) as futureDate from ",
-tabname, " as a , (select modify_date from (SELECT  
-       case 
-			when s.name is not null then s.name else a.name end AS name, 
-       a.modify_date
-FROM   
-     sys.objects a
-     INNER JOIN sys.columns b
-          ON a.object_id = b.object_id
-     left join sys.synonyms s on 
-		replace(replace( s.base_object_name, '[', ''), ']', '') = a.name
-WHERE a.type IN('U', 'V')) a  WHERE a.name ='",tabname,"') as b"
+                      select '",tabname, "' as tableName, '", colname,"' as dateName ,count(*) as nrows, sum(case when a.",colname,">'", modify_date, "' then 1 else 0 end) as futureDate from ",
+tabname, " as a;"
 )
   })
 fdatelst <- list()
@@ -1617,8 +1630,8 @@ knitr::kable(data_result_75_complete,row.names = FALSE, col.names = c("Month", "
 # close odbc
 odbcCloseAll()
 endTime <- Sys.time()
-runtime <- endTime - startTime
+runtime <- difftime(endTime, startTime)
 ```
 
 
-Query run time = `r runtime` minutes
+Query run time = `r format(round(runtime, 3))`
