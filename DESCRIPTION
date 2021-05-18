@@ -9,7 +9,7 @@ Authors@R: c(
 Maintainer: Will Carter <William.A.Carter@cuanschutz.edu>
 Description: This package contains the function, .RMD files, and data files necessary for generating all CHORDS priority tables.
 Depends:
-    R (>= 3.6.0)
+    R (>= 4.0.0)
 Imports: 
     tidyr,
     rmarkdown,
