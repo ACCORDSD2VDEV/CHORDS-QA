@@ -49,6 +49,45 @@ run_report <- function(priority, dbserver = NULL, dbname = NULL, dbuser = NULL, 
   else{
     assign("outputdir", value = outputdir, envir = .GlobalEnv)
   }
+
+  # If for some reason the working directory is the windows dir, will change
+  #  it to the output directory.
+  if(tolower(getwd()) %in% tolower(c("C:/Windows/system32"))){
+    setwd(outputdir)
+  }
+
+  # Since pandoc is required to run, checks to see if it is installed.  Will check
+  #  to see if it's in their APPDATA directory.  If not, will try to download it
+  #  to the users APPDATA roaming directory. If still missing, will direct the user to
+  #  download and install it themselves.  Should only be an issue for
+  #  command-line or PMN execution as RStudio comes with pandoc.  Alternatively,
+  #  pandoc can be placed in the working directory of this R program.
+  if(rmarkdown::pandoc_version() < "2.0"){
+    tryCatch({
+        destDir <- file.path(Sys.getenv("APPDATA"), "pandoc")
+        rmarkdown::find_pandoc(dir=destDir)
+        if (rmarkdown::find_pandoc(dir=destDir)$version >= "2.0"){
+          rmarkdown::pandoc_path_arg(destDir)
+        } else {
+          githubURL <- "https://github.com/jgm/pandoc/releases/download/2.13/pandoc-2.13-windows-x86_64.zip"
+          destDir <- file.path(Sys.getenv("APPDATA"), "pandoc")
+          dir.create(destDir, showWarnings = FALSE)
+          destFile <- file.path(destDir, "pandoc.zip", sep='')
+          download.file(url=githubURL, destfile=destFile, method="auto")
+          unzip(destFile, overwrite=T, exdir=destDir, junkpaths = T)
+          file.remove(destFile)
+          rmarkdown::find_pandoc(dir=paste(destDir))
+
+          if(rmarkdown::find_pandoc(dir=destDir)$version >= "2.0"){
+            rmarkdown::pandoc_path_arg(destDir)
+          } else {
+            stop("Pandoc version 2.0 or higher is required.\r\nPlease visit https://www.pandoc.org/installing to install this program before running a CHORDS QA request")
+          }
+       }
+    },error = function(cond){
+      stop(paste(cond, "Pandoc version 2.0 or higher is required.\r\nPlease visit https://www.pandoc.org/installing to install this program before running a CHORDS QA request"))
+    })
+  }
   if (priority == "P1"){
     if (!is.null(batchmode) && batchmode == TRUE){
       rmarkdown::render(input = system.file("rmd/P1.Rmd", package = "chordsTables"),
@@ -151,6 +190,7 @@ run_db_query <- function(Connection_String, query_text, ...) {
       return(result)
     },
     error = function(cond){
+      queryError <- cond
       stop(cond)
       return(NA)
     },
