@@ -1,6 +1,6 @@
 Package: chordsTables
 Title: Package for generating CHORDS priority tables
-Version: 0.5.0
+Version: 0.4.4
 Authors@R: c(
     person("Will", "Carter", email = "William.A.Carter@cuanschutz.edu", role = c("aut", "ctb", "cre")),
     person("Emily", "Bacon", email = "baconanalyticsco@gmail.com", role = c("aut", "ctb")),

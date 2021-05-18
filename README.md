@@ -4,10 +4,10 @@ The `chordsTables` package is designed to provide an interface for providers to 
 
 ## Prerequisite Software
 
-1) R version 4.0.4: https://cran.r-project.org/bin/windows/base/old/4.0.4/
+1) R version 3.6.1: https://cran.r-project.org/bin/windows/base/old/3.6.1/
 2) Pandoc: https://pandoc.org/installing.html
 
-Use of this package assumes you have have downloaded and installed R and RStudio.  Installing the `chordsTables` package downloads all other dependent packages and contains all files necessary for generating reports.
+Use of this package assumes you have have downloaded and installed R and RStudio.  You can download the most updated version of this package from ([here](https://github.com/UCCC/CHORDS-QA/tree/PMN)). Installing the `chordsTables` package downloads all other dependent packages and contains all files necessary for generating reports.
 
 # Step by step use of package
 
@@ -17,7 +17,6 @@ In order to download and install the `chordsTables` package you will need to ins
 
 ```{r, eval=FALSE}
 install.packages("devtools")
-install.packages("renv")
 ```
 
 Once you have download and installed R, RStudio, and the devtools and renv packages, download the `chordsTables` package. You can download the package by running the following code in RStudio or an R Command window:
