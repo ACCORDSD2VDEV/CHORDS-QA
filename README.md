@@ -4,25 +4,26 @@ The `chordsTables` package is designed to provide an interface for providers to 
 
 ## Prerequisite Software
 
-1) R version 3.6.1: https://cran.r-project.org/bin/windows/base/old/3.6.1/
+1) R version 4.0.4: https://cran.r-project.org/bin/windows/base/old/4.0.4/
 2) Pandoc: https://pandoc.org/installing.html
 
-Use of this package assumes you have have downloaded and installed R and RStudio.  You can download the most updated version of this package from ([here](https://github.com/UCCC/CHORDS-QA/tree/PMN)). Installing the `chordsTables` package downloads all other dependent packages and contains all files necessary for generating reports.
+Use of this package assumes you have have downloaded and installed R and RStudio.  Installing the `chordsTables` package downloads all other dependent packages and contains all files necessary for generating reports.
 
 # Step by step use of package
 
 ## Step 1
 
-In order to download and install the `chordsTables` package you will need to install the `devtools` and `renv` packages to install the package from github.  If you don't have those packages (which is likely true for most users), you can use the following code to install it:
+In order to download and install the `chordsTables` package you will need to install the `devtools` package to install the package from github.  If you don't have the `devtools` package (which is likely true for most users), you can use the following code to download it:
 
 ```{r, eval=FALSE}
 install.packages("devtools")
+install.packages("renv")
 ```
 
-Once you have download and installed R, RStudio, and the devtools and renv packages, download the `chordsTables` package. You can download the package by running the following code in RStudio or an R Command window:
+Once you have download and installed R, RStudio, download the `chordsTables` package. You can download the package by running the following code in RStudio or an R Command window:
 
 ```{r, eval=FALSE}
-devtools::install_github("ACCORDSD2VDEV/CHORDS-QA")
+devtools::install_github("UCCC/CHORDS-QA")
 ```
 If you need to install from a branch other than the main branch, use the ```ref``` argument in the ```install_github``` function to specify a different branch.
 
@@ -31,12 +32,6 @@ You may receive the following prompt:
 You can skip this update by entering the number 3 in the console.
 
 If you are running the package from an R console, you will need to set an R environment variable to suppress warnings from appearing as errors with ```Sys.setenv(R_REMOTES_NO_ERRORS_FROM_WARNINGS="true")```
-
-Finally, to install any remaining dependecies, run the following:
-```{r, eval=FALSE}
-renv::restore()
-```
-This will install specific versions of packages needed to run the reports.
 
 ## Step 2
 
