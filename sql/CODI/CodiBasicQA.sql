@@ -1,3 +1,4 @@
+--Set to either CODI or DBO
 DECLARE @codiSchema VARCHAR(10) = 'CODI';
 
 DROP TABLE IF EXISTS #CODITABLES;
