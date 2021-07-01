@@ -61,6 +61,8 @@ BEGIN
 			,@exists = @exist OUTPUT;
 
 		SET @MessageRef1 = @exist;
+		IF (@MessageRef1 IS NULL)
+		 SET @MessageRef1 = 'Y'
 	END TRY
 
 	BEGIN CATCH
@@ -87,8 +89,8 @@ BEGIN
 		);
 
 	SET @counter = @counter + 1;
-	SET @MessageRef1 = NULL;
-	SET @MessageRef2 = NULL;
+	SET @MessageRef1 = 'N';
+	SET @MessageRef2 = 0;
 	SET @exist = NULL;
 	SET @counts = 0;
 END;
