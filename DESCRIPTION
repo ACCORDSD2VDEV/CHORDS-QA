@@ -20,7 +20,8 @@ Imports:
     R.utils,
     shiny,
     flextable,
-    officer
+    officer,
+    here
 License: What license is it under?
 URL: http://github.com/UCC/CHORDS-QA
 BugReports: http://github.com/UCC/CHORDS-QA/issues

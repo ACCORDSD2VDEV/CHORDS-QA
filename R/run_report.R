@@ -25,6 +25,7 @@
 #' @import shiny
 #' @import flextable
 #' @import officer
+#' @import here
 #' @rdname run_report
 #' @export
 
@@ -56,38 +57,10 @@ run_report <- function(priority, dbserver = NULL, dbname = NULL, dbuser = NULL, 
     setwd(outputdir)
   }
 
-  # Since pandoc is required to run, checks to see if it is installed.  Will check
-  #  to see if it's in their APPDATA directory.  If not, will try to download it
-  #  to the users APPDATA roaming directory. If still missing, will direct the user to
-  #  download and install it themselves.  Should only be an issue for
-  #  command-line or PMN execution as RStudio comes with pandoc.  Alternatively,
-  #  pandoc can be placed in the working directory of this R program.
-  if(rmarkdown::pandoc_version() < "2.0"){
-    tryCatch({
-        destDir <- file.path(Sys.getenv("APPDATA"), "pandoc")
-        rmarkdown::find_pandoc(dir=destDir)
-        if (rmarkdown::find_pandoc(dir=destDir)$version >= "2.0"){
-          rmarkdown::pandoc_path_arg(destDir)
-        } else {
-          githubURL <- "https://github.com/jgm/pandoc/releases/download/2.13/pandoc-2.13-windows-x86_64.zip"
-          destDir <- file.path(Sys.getenv("APPDATA"), "pandoc")
-          dir.create(destDir, showWarnings = FALSE)
-          destFile <- file.path(destDir, "pandoc.zip", sep='')
-          download.file(url=githubURL, destfile=destFile, method="auto")
-          unzip(destFile, overwrite=T, exdir=destDir, junkpaths = T)
-          file.remove(destFile)
-          rmarkdown::find_pandoc(dir=paste(destDir))
-
-          if(rmarkdown::find_pandoc(dir=destDir)$version >= "2.0"){
-            rmarkdown::pandoc_path_arg(destDir)
-          } else {
-            stop("Pandoc version 2.0 or higher is required.\r\nPlease visit https://www.pandoc.org/installing to install this program before running a CHORDS QA request")
-          }
-       }
-    },error = function(cond){
-      stop(paste(cond, "Pandoc version 2.0 or higher is required.\r\nPlease visit https://www.pandoc.org/installing to install this program before running a CHORDS QA request"))
-    })
+  if(!checkforPandoc()){
+    stop(paste(cond, "Pandoc version 2.0 or higher is required.\r\nPlease visit https://www.pandoc.org/installing to install this program before running a CHORDS QA request"))
   }
+
   if (priority == "P1"){
     if (!is.null(batchmode) && batchmode == TRUE){
       rmarkdown::render(input = system.file("rmd/P1.Rmd", package = "chordsTables"),
@@ -472,4 +445,42 @@ timeTest <- function(time, Freq, outcome, nmons=24) {
   }
 
   return(do.call('rbind', res))
+}
+
+# Since pandoc is required to run, checks to see if it is installed.  Will check
+#  to see if it's in their APPDATA directory.  If not, will try to download it
+#  to the users APPDATA roaming directory. If still missing, will direct the user to
+#  download and install it themselves.  Should only be an issue for
+#  command-line or PMN execution as RStudio comes with pandoc.  Alternatively,
+#  pandoc can be placed in the working directory of this R program.
+checkforPandoc <- function() {
+  if(rmarkdown::pandoc_version() >= "2.0"){
+    return(TRUE)
+  } else {
+    tryCatch({
+      destDir <- file.path(Sys.getenv("APPDATA"), "pandoc")
+      rmarkdown::find_pandoc(dir=destDir)
+      if (rmarkdown::find_pandoc(dir=destDir)$version >= "2.0"){
+        return(TRUE)
+        } else {
+          githubURL <- "https://github.com/jgm/pandoc/releases/download/2.13/pandoc-2.13-windows-x86_64.zip"
+          destDir <- file.path(Sys.getenv("APPDATA"), "pandoc")
+          dir.create(destDir, showWarnings = FALSE)
+          destFile <- file.path(destDir, "pandoc.zip", sep='')
+          download.file(url=githubURL, destfile=destFile, method="auto")
+          unzip(destFile, overwrite=T, exdir=destDir, junkpaths = T)
+          file.remove(destFile)
+          rmarkdown::find_pandoc(dir=paste(destDir))
+
+          if(rmarkdown::find_pandoc(dir=destDir)$version >= "2.0"){
+            return(TRUE)
+          } else {
+            return(FALSE)
+          }
+      }
+    },error = function(cond){
+      return(FALSE)
+    })
+  }
+  return(TRUE)
 }
