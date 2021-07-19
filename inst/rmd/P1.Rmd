@@ -2100,66 +2100,52 @@ knitr::kable(tab_race5lang,
 # create a temp table in the SQL DB temp drive, this will not be pulled into the R workspace.This pulls in the most recent encounter date and combines it with race and hispanic data from demographics
 tempCon1 <- get_connection()
 encTmp1 <-   sqlQuery(tempCon1,
-                  paste('SET NOCOUNT ON; SELECT d.*, demo.RACE1, demo.HISPANIC ',
-                                         'INTO #encTmp1 ',
-                                         'FROM (',
-                                         'SELECT a.PERSON_ID, max(adate) as lastEnc',
-                        'FROM ',encounters, ' as a inner join (select distinct person_id  from  ',demographics,') as b on a.person_id = b.person_id group by a.PERSON_ID) as d',
-                        'inner join ',demographics,' demo on demo.PERSON_ID = d.PERSON_ID',
-                                         sep=" "
+                  paste0('SET NOCOUNT ON; 
+                         SELECT d.*, demo.RACE1, demo.HISPANIC
+                         INTO #encTmp1 
+                         FROM (
+                            SELECT a.PERSON_ID, 
+                              max(adate) as lastEnc
+                            FROM ',encounters, ' as a 
+                         inner join (
+                            select distinct person_id
+                            from  ',demographics,') as b on a.person_id = b.person_id
+                            group by a.PERSON_ID) as d
+                         inner join ',demographics,' demo on demo.PERSON_ID = d.PERSON_ID'
                         )
                   )
 
-tab7.11_rowCnt <-sqlQuery(tempCon1,
-                 paste("SELECT   
-       lastEnc.year,
-       ISNULL(missingRaceHispanic.rowCnt, 0) rowCnt
-FROM         
-(
-    SELECT
-           YEAR(lastEnc) AS year,
-           COUNT(*) AS rowCnt
-    FROM  
-         #encTmp1
-    GROUP BY
-             YEAR(lastEnc)
-) lastEnc
-LEFT JOIN
-(
-    SELECT
-           YEAR(lastEnc) AS year,
-           COUNT(*) AS rowCnt
-    FROM  
-         #encTmp1
-    WHERE  Race1 IN('UN')
-    AND Hispanic IN('U')
-    GROUP BY
-             YEAR(lastEnc)
-) missingRaceHispanic
-     ON missingRaceHispanic.year = lastEnc.year
-ORDER BY
-         lastEnc.year", 
-sep=" "
+tab7.11_rowCnt <-sqlQuery(tempCon1, paste0("
+    SELECT lastEnc.year
+    	,lastEnc.rowCnt rowCnt
+    	,ISNULL(missingRaceHispanic.rowCnt, 0) missingRowCnt
+    FROM (
+    	SELECT YEAR(lastEnc) AS year
+    		,COUNT(*) AS rowCnt
+    	FROM #encTmp1
+    	GROUP BY YEAR(lastEnc)
+    	) lastEnc
+    LEFT JOIN (
+    	SELECT YEAR(lastEnc) AS year
+    		,COUNT(*) AS rowCnt
+    	FROM #encTmp1
+    	WHERE Race1 IN ('UN')
+    		AND Hispanic IN ('U')
+    	GROUP BY YEAR(lastEnc)
+    	) missingRaceHispanic ON missingRaceHispanic.year = lastEnc.year
+    ORDER BY lastEnc.year")
 )
-)
-
-tab7.11_totalCnt <-sqlQuery(tempCon1,
-                 paste("SELECT year(lastEnc) as year, count(*) as rowCnt",
-                       "FROM #encTmp1 GROUP BY year(lastEnc)",
-                       sep=" "
-                       )
-                )
 
 RODBC::odbcClose(tempCon1)
 
-tab7.11_combined <- data.frame(cbind(tab7.11_rowCnt, tab7.11_totalCnt$rowCnt))
+tab7.11_combined <- tab7.11_rowCnt
 
-tab7.11_combined$rowPct <- round(100*tab7.11_combined$rowCnt/tab7.11_combined$tab7.11_totalCnt.rowCnt,1)
+tab7.11_combined$rowPct <- round(100*(tab7.11_combined$missingRowCnt/tab7.11_combined$rowCnt),1)
 tab7.11_combined$year <- as.character(tab7.11_combined$year)
 ```
 
 ```{r tab7.11_disp, echo = F, include=T}
-knitr::kable(tab7.11_combined[    c('year', 'rowCnt','tab7.11_totalCnt.rowCnt','rowPct')], 
+knitr::kable(tab7.11_combined[    c('year', 'missingRowCnt','rowCnt','rowPct')], 
             col.names = c("Year","Frequency Unknown Race1 and Hispanic","Total Frequency","Percent Missing Race1 and Hispanic"), row.names=FALSE, 
             format.args = list(big.mark = ","), align = 'c')
 ```   
