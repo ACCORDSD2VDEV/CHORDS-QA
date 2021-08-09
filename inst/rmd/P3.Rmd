@@ -506,7 +506,7 @@ odbcClose(connection106)
 if (params$QAAlert == TRUE & nrow(data_validation) > 0){
   data_validation_table <- data.frame(data_validation, stringsAsFactors = FALSE)
   data_validation_table$message <- paste0(data_validation_table$TargetTable, ".", data_validation_table$TargetColumn, sep="")
-  QA_Alert_Message_106_items <- paste0(data_validation_table$message, collapse = ', ')
+  QA_Alert_Message_106_items <- paste0(unique(data_validation_table$message), collapse = ', ')
   QA_Alert_Message_106 <- paste0("The following required fields contain values outside of data model specifications: ",
                                   QA_Alert_Message_106_items)
   QA_Alert_Messages[nrow(QA_Alert_Messages) + 1,] = c("1.06", QA_Alert_Message_106)
