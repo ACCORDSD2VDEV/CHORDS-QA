@@ -54,7 +54,7 @@ library(officer)
 knitr::opts_chunk$set(echo = TRUE,
                 message = FALSE,
                 warning = FALSE,
-                error = TRUE,
+                error = F,
                 time_it = TRUE,
                 capture_error = TRUE)
 
@@ -157,13 +157,7 @@ The purpose of the data quality program is to characterize the data in CHORDS VD
 Data Partner:\
 Analyst:\
 Query Run Date: **`r Sys.Date()`**
-
-## Data Quality Report Results
-
-## Table 1. Records, Patients, Encounters, and Date Ranges by Table
-
-This table contains summary counts and date ranges by table. Distinct encounters and patients are shown for applicable tables. Data ranges should be used to compare data time windows between tables.
-
+ 
 ```{r tab1_sum_stats, echo = F, include=T}
 tab1_dem <- run_query(paste0("select count(*) as nrows, 
 	count(distinct person_id) as npats
@@ -182,6 +176,9 @@ tab1_enc <- run_query(paste0("select count(*) as nrows,
 	min(cast(ADATE as date)) as mindt,
 	max(cast(ADATE as date)) as maxdt
 	from ", encounters))
+
+tab1_cl <- run_query(paste0("select count(*) as nrows
+	from ", census_location))
 
 tab1_dx <- run_query(paste0("select count(*) as nrows, 
 	count(distinct person_id) as npats,
@@ -244,14 +241,16 @@ tab1_all <- bind_rows(tab1_dem, tab1_enc, tab1_cen, tab1_dx, tab1_vs, tab1_ben) 
 
 ```
 
-```{r tab1_disp, echo = F, include=T}
-kable(tab1_all, col.names = c("Table", "Records", "Patients", "Encounters", "Date Field", "Min Date", "Max Date"), align = 'c', format.args = list(big.mark = ","))
-  
+
+
+```{r validation messages, echo = F,  include = T}
+# set up empty container for alert messages
+QA_Alert_Messages <- data.frame(#'Alert Code'=character(),
+                 'Alert Message'=character(), stringsAsFactors = FALSE)
+
+# populate as:  QA_Alert_Messages[nrow(QA_Alert_Messages) + 1,] = c(missingTableMessage)
+
 ```
-
-## Table 2. Missingness Variables across P1 Tables
-
-This table contains record counts for null and unknown values across P1 tables.
 
 
 ```{r tab2_res, echo = F, include=T}
@@ -271,6 +270,28 @@ tab2_demo_null <- run_query(
       FROM ", demographics))
 tab2_demo_null2 <- data.frame(table = rep("DEMOGRAPHICS", ncol(tab2_demo_null)), var = names(tab2_demo_null), records_null = t(tab2_demo_null)[,1])
 row.names(tab2_demo_null2) <- NULL
+
+# alerts for demographics
+missDobPct <- 100*tab2_demo_null[,'BIRTH_DATE']/tab1_dem$nrows
+
+if(missDobPct>1) {QA_Alert_Messages[nrow(QA_Alert_Messages) + 1,] = paste0('The demographics table has ',round(missDobPct,1),'% rows missing DOB')}
+
+missGenderPct <- 100*tab2_demo_null[,'GENDER']/tab1_dem$nrows
+
+if(missGenderPct>1) {QA_Alert_Messages[nrow(QA_Alert_Messages) + 1,] = paste0('The demographics table has ',round(missGenderPct,1),'% rows missing gender')}
+
+missPLangPct <- 100*tab2_demo_null[,'PRIMARY_LANGUAGE']/tab1_dem$nrows
+
+if(missPLangPct>10) {QA_Alert_Messages[nrow(QA_Alert_Messages) + 1,] = paste0('The demographics table has ',round(missPLangPct,1),'% rows missing primary language')}
+
+missRace1Pct <- 100*tab2_demo_null[,'RACE1']/tab1_dem$nrows
+
+if(missRace1Pct>10) {QA_Alert_Messages[nrow(QA_Alert_Messages) + 1,] = paste0('The demographics table has ',round(missRace1Pct,1),'% rows missing race 1')}
+
+missHispPct <- 100*tab2_demo_null[,'HISPANIC']/tab1_dem$nrows
+
+if(missHispPct>10) {QA_Alert_Messages[nrow(QA_Alert_Messages) + 1,] = paste0('The demographics table has ',round(missHispPct,1),'% rows missing hispanic flag')}
+
 tab2_enc_null <- run_query( 
   paste0("SELECT SUM(CASE WHEN ADATE IS NULL THEN 1 ELSE 0 END) as ADATE,
    SUM(CASE WHEN DDATE IS NULL THEN 1 ELSE 0 END) as DDATE,
@@ -282,12 +303,49 @@ tab2_enc_null <- run_query(
       FROM ", encounters))
 tab2_enc_null2 <- data.frame(table = rep("ENCOUNTERS", ncol(tab2_enc_null)), var = names(tab2_enc_null), records_null = t(tab2_enc_null)[,1])
 row.names(tab2_enc_null2) <- NULL
+
+# alerts for the encounter table
+missAdatePct <- 100*tab2_enc_null[,'ADATE']/tab1_enc$nrows
+
+if(missAdatePct>1) {QA_Alert_Messages[nrow(QA_Alert_Messages) + 1,] = paste0('The encounter table has ',round(missAdatePct,1),'% rows missing ADATE')}
+
+missDdatePct <- 100*tab2_enc_null[,'DDATE']/tab1_enc$nrows
+
+if(missDdatePct>1) {QA_Alert_Messages[nrow(QA_Alert_Messages) + 1,] = paste0('The encounter table has ',round(missDdatePct,1),'% rows missing DDATE')}
+
+missProvPct <- 100*tab2_enc_null[,'PROVIDER']/tab1_enc$nrows
+
+if(missProvPct>10) {QA_Alert_Messages[nrow(QA_Alert_Messages) + 1,] = paste0('The encounter table has ',round(missProvPct,1),'% rows missing provider')}
+
+missEncTypePct <- 100*tab2_enc_null[,'ENCOUNTER_TYPE']/tab1_enc$nrows
+
+if(missEncTypePct>1) {QA_Alert_Messages[nrow(QA_Alert_Messages) + 1,] = paste0('The encounter table has ',round(missEncTypePct,1),'% rows missing encounter type')}
+
+missEncSubTypePct <- 100*tab2_enc_null[,'ENCOUNTER_SUBTYPE']/tab1_enc$nrows
+
+if(missEncSubTypePct>1) {QA_Alert_Messages[nrow(QA_Alert_Messages) + 1,] = paste0('The encounter table has ',round(missEncSubTypePct,1),'% rows missing encounter sub type')}
+
+missFacPct <- 100*tab2_enc_null[,'FACILITY']/tab1_enc$nrows
+
+if(missFacPct>10) {QA_Alert_Messages[nrow(QA_Alert_Messages) + 1,] = paste0('The encounter table has ',round(missFacPct,1),'% rows missing facility')}
+
+missDeptPct <- 100*tab2_enc_null[,'DEPARTMENT']/tab1_enc$nrows
+
+if(missDeptPct>10) {QA_Alert_Messages[nrow(QA_Alert_Messages) + 1,] = paste0('The encounter table has ',round(missDeptPct,1),'% rows missing department')}
+
 tab2_cl_null <- run_query( 
   paste0("SELECT SUM(CASE WHEN GEOCODE IS NULL THEN 1 ELSE 0 END) as GEOCODE,
    SUM(CASE WHEN CITY_GEOCODE IS NULL THEN 1 ELSE 0 END) as CITY_GEOCODE
       FROM ", census_location))
 tab2_cl_null2 <- data.frame(table = rep("CENSUS_LOCATION", ncol(tab2_cl_null)), var = names(tab2_cl_null), records_null = t(tab2_cl_null)[,1])
 row.names(tab2_cl_null2) <- NULL
+
+# alerts for census location
+missGeoCdPct <- 100*tab2_cl_null[,'GEOCODE']/tab1_cl$nrows
+
+if(missGeoCdPct>10) {QA_Alert_Messages[nrow(QA_Alert_Messages) + 1,] = paste0('The census location table has ',round(missGeoCdPct,1),'% rows missing geocode')}
+
+
 tab2_dx_null <- run_query( 
   paste0("SELECT SUM(CASE WHEN ENC_ID IS NULL THEN 1 ELSE 0 END) as ENC_ID,
    SUM(CASE WHEN ADATE IS NULL THEN 1 ELSE 0 END) as ADATE,
@@ -298,6 +356,34 @@ tab2_dx_null <- run_query(
       FROM ", diagnoses))
 tab2_dx_null2 <- data.frame(table = rep("DIAGNOSES", ncol(tab2_dx_null)), var = names(tab2_dx_null), records_null = t(tab2_dx_null)[,1])
 row.names(tab2_dx_null2) <- NULL
+
+
+# alerts for the diagnosis table
+missEncIDPct <- 100*tab2_dx_null[,'ENC_ID']/tab1_dx$nrows
+
+if(missEncIDPct>1) {QA_Alert_Messages[nrow(QA_Alert_Messages) + 1,] = paste0('The diagnosis table has ',round(missEncIDPct,1),'% rows missing encounter ID')}
+
+missAdateDXPct <- 100*tab2_dx_null[,'ADATE']/tab1_dx$nrows
+
+if(missAdateDXPct>1) {QA_Alert_Messages[nrow(QA_Alert_Messages) + 1,] = paste0('The diagnosis table has ',round(missAdateDXPct,1),'% rows missing ADATE')}
+
+missDXDXPct <- 100*tab2_dx_null[,'DX']/tab1_dx$nrows
+
+if(missDXDXPct>1) {QA_Alert_Messages[nrow(QA_Alert_Messages) + 1,] = paste0('The diagnosis table has ',round(missDXDXPct,1),'% rows missing diagnosis')}
+
+missDXCodeTypeDXPct <- 100*tab2_dx_null[,'DX_CODETYPE']/tab1_dx$nrows
+
+if(missDXCodeTypeDXPct>1) {QA_Alert_Messages[nrow(QA_Alert_Messages) + 1,] = paste0('The diagnosis table has ',round(missDXCodeTypeDXPct,1),'% rows missing diagnosis code type')}
+
+missPrinDXPct <- 100*tab2_dx_null[,'PRINCIPAL_DX']/tab1_dx$nrows
+
+if(missPrinDXPct>1) {QA_Alert_Messages[nrow(QA_Alert_Messages) + 1,] = paste0('The diagnosis table has ',round(missPrinDXPct,1),'% rows missing principal diagnosis flag')}
+
+missPrimDXPct <- 100*tab2_dx_null[,'PRIMARY_DX']/tab1_dx$nrows
+
+if(missPrimDXPct>1) {QA_Alert_Messages[nrow(QA_Alert_Messages) + 1,] = paste0('The diagnosis table has ',round(missPrimDXPct,1),'% rows missing primary diagnosis flag')}
+
+
 tab2_vs_null <- run_query(
   paste0("SELECT SUM(CASE WHEN ENC_ID IS NULL THEN 1 ELSE 0 END) as ENC_ID,
    SUM(CASE WHEN ENCTYPE IS NULL THEN 1 ELSE 0 END) as ENCTYPE,
@@ -320,6 +406,16 @@ tab2_vs_null <- run_query(
 tab2_vs_null2 <- data.frame(table = rep("VITAL_SIGNS", ncol(tab2_vs_null)), var = names(tab2_vs_null), records_null = t(tab2_vs_null)[,1])
 row.names(tab2_vs_null2) <- NULL
 
+# alerts for vital signs
+missEncTypeVSPct <- 100*tab2_vs_null[,'ENCTYPE']/tab1_vs$nrows
+
+if(missEncTypeVSPct>1) {QA_Alert_Messages[nrow(QA_Alert_Messages) + 1,] = paste0('The vital signs table has ',round(missEncTypeVSPct,1),'% rows missing encounter type')}
+
+missEncIdVSPct <- 100*tab2_vs_null[,'ENC_ID']/tab1_vs$nrows
+
+if(missEncIdVSPct>1) {QA_Alert_Messages[nrow(QA_Alert_Messages) + 1,] = paste0('The vital signs table has ',round(missEncIdVSPct,1),'% rows missing encounter ID')}
+
+
 tab2_benefit_null <- run_query(
   paste0("SELECT SUM(IIF(LOAD_DATE IS NULL, 1, 0)) LOAD_DATE
 	,SUM(IIF(REFRESH_DATE IS NULL, 1, 0)) REFRESH_DATE
@@ -332,6 +428,24 @@ tab2_benefit_null <- run_query(
 FROM ", benefit))
 tab2_benefit_null2 <- data.frame(table = rep("BENEFIT", ncol(tab2_benefit_null)), var = names(tab2_benefit_null), records_null = t(tab2_benefit_null)[,1])
 row.names(tab2_benefit_null2) <- NULL
+
+#alerts for the benefit table
+missBenTypeBenPct <- 100*tab2_benefit_null[,'BENEFIT_TYPE']/tab1_ben$nrows
+
+if(missBenTypeBenPct>1) {QA_Alert_Messages[nrow(QA_Alert_Messages) + 1,] = paste0('The benefit table has ',round(missBenTypeBenPct,1),'% rows missing benefit type')}
+
+missBenCatBenPct <- 100*tab2_benefit_null[,'BENEFIT_CAT']/tab1_ben$nrows
+
+if(missBenCatBenPct>1) {QA_Alert_Messages[nrow(QA_Alert_Messages) + 1,] = paste0('The benefit table has ',round(missBenCatBenPct,1),'% rows missing benefit category')}
+
+missBenDateBenPct <- 100*tab2_benefit_null[,'BENEFIT_DATE']/tab1_ben$nrows
+
+if(missBenDateBenPct>1) {QA_Alert_Messages[nrow(QA_Alert_Messages) + 1,] = paste0('The benefit table has ',round(missBenDateBenPct,1),'% rows missing benefit date')}
+
+missEncIdBenPct <- 100*tab2_benefit_null[,'ENC_ID']/tab1_ben$nrows
+
+if(missEncIdBenPct>10) {QA_Alert_Messages[nrow(QA_Alert_Messages) + 1,] = paste0('The benefit table has ',round(missEncIdBenPct,1),'% rows missing encounter ID')}
+
 
 tab2_null <- bind_rows(tab2_demo_null2, tab2_enc_null2, tab2_cl_null2, tab2_dx_null2, tab2_vs_null2, tab2_benefit_null2) %>% 
   mutate(
@@ -380,16 +494,8 @@ tab2_uk <- bind_rows(tab2_demo_uk2, tab2_enc_uk2, tab2_benefit_uk2) %>%
 
 tab2_all <- left_join(tab2_null, tab2_uk, by = c("table", "var"))
 ```
-
-```{r tab2_disp, echo = F, include=T}
-kable(tab2_all, col.names = c("Table", "Variable", "Null Records", "Percent of Records Null", "'Unknown' or 'No Information' Records", "Percent of Records 'Unknown' or 'No Information'"), digits = 2, format.args = list(big.mark = ","))
-```
-
-
-## Examination of the DEMOGRAPHICS Table
-
-## Table 3. Overall Demographics
-
+ 
+ 
 ```{r Demographic table, echo = F, include=T}
 nDemogRows <- run_query(paste0("select  count(*) as nDemogRows FROM ",   demographics)) 
 demogSummary <- run_query(
@@ -458,14 +564,7 @@ demogTable <-
   )
 )
 ```
-
-```{r tab3_disp, echo = F, include=T}
-knitr::kable(demogTable, col.names=c("Characteristic","Frequency","Percent of unique patients"), row.names=FALSE, format.args = list(big.mark = ","))
-```
-
-**`r if(exists("demogSummary")){ifelse(demogSummary$nDemogRows==demogSummary$nPatsDemog," ","The demographics table has duplicate rows, by person_id")}`**
-
- 
+  
 ```{r demographic counts, echo = F, include=T}
 demogCounts <- run_query( 
                   paste('SELECT gender, gender_identity, sexual_orientation, primary_language, race1, race2, race3, race4, race5, hispanic, count(*) as nRows',
@@ -479,8 +578,7 @@ demogCounts <- run_query(
 demogCounts <- trimChrVars(demogCounts)
 ```
 
-## Table 4. Top 5 Patient Primary Languages
-
+ 
 ```{r primary language, echo = F, include=T}
 primLang <- demogCounts %>% 
             group_by(primary_language) %>% 
@@ -497,14 +595,6 @@ primLang <- within(merge(primLang,isoLang[c('code3B','InEnglish')],by.x='primary
 })
 ```
 
-```{r tab4_disp, echo = F, include=T}
-knitr::kable(primLang[1:5, c('primary_language', 'InEnglish','langCnt','langPct')], 
-            col.names=     c("ISO Language","Language name ","Frequency","Percent"), 
-            row.names=FALSE, 
-            format.args = list(big.mark = ","))
-```
-
-## Table 4.1. Other and Unknown Language Count 
 
 ```{r other/missing primary language, echo = F, include=T}
 unkLang <- subset(primLang, primary_language %in% c("UNK","OTH", "UND"))
@@ -528,16 +618,6 @@ unkLang <-rbind(unkLang, rowsum)
 rownames(unkLang) <- c(unkLangRowsNames, "Total Other, Unknown, or Undetermined Language")
 ```
 
-```{r tab4.1_disp, echo = F, include=T}
-
-knitr::kable(unkLang[1:3, c('langCnt','langPct')], 
-            col.names=     c("Frequency","Percent"), 
-            row.names= T, 
-            format.args = list(big.mark = ","))
-
-```
-
-## Table 5. Gender Distribution 
 
 ```{r gender , echo = F, include=T}
 gender <-   demogCounts %>% 
@@ -552,13 +632,6 @@ gender <- within(merge(gender,subset(valSets,tableName=='DEMOGRAPHICS' & columnN
 })
 ```
 
-```{r tab5_disp, echo = F, include=T}
-knitr::kable(gender[    c('gender', 'decode','count','countPct')], 
-            col.names = c("Value","Label","Frequency","Percent"), row.names=FALSE, 
-            format.args = list(big.mark = ","))
-```
-
-## Table 5.1. Gender Identity Distribution 
 
 ```{r gender_identity , echo = F, include=T}
 gender_identity <-   demogCounts %>% 
@@ -570,17 +643,9 @@ gender_identity <-   demogCounts %>%
                   )
 ```
 
-```{r tab5.1_disp, echo = F, include=T}
+
+
  
-knitr::kable(gender_identity[c('gender_identity','count','countPct')], 
-            col.names = c('Gender_Identity',"Frequency", "Percent"), 
-            row.names=F, 
-            format.args = list(big.mark = ","))
-```
-
-
-## Table 5.2. Gender Identity by Gender Distribution 
-
 ```{r gender_by_gender_identity , echo = F, include=T} 
 tab_gender_identity<- run_query(gsub("%DEMOGRAPHICS%", demographics, "
 SET NOCOUNT ON;
@@ -637,16 +702,7 @@ tab_gender_identity <- cbind("Gender Identity" = category, tab_gender_identity)
 
 ```
 
-```{r tab5.2_disp, echo = F, include=T}
-
-knitr::kable(tab_gender_identity[c('Gender Identity','Male','Percent_Male', 'Female', 'Percent_Female', 'Unknown Gender', 'Total Frequency')], 
-            col.names = c('Gender Identity','Male','Percent Male', 'Female', 'Percent Female', 'Unknown Gender', 'Total Frequency'), 
-            row.names=F, 
-            format.args = list(big.mark = ","))
-```
-
-## Table 5.3. Sexual Orientation Distribution 
-
+ 
 ```{r sexual_orientation , echo = F, include=T}
 sexual_orientation <-   demogCounts %>% 
             group_by(sexual_orientation) %>% 
@@ -662,15 +718,7 @@ sexual_orientation <- within(merge(sexual_orientation,subset(valSets,tableName==
 
 ```
 
-```{r tab5.3_disp, echo = F, include=T}
-knitr::kable(sexual_orientation[c( 'sexual_orientation','count','countPct')], 
-            col.names = c('Sexual Orientation',"Frequency", "Percent"), 
-            row.names=F, 
-            format.args = list(big.mark = ","))
-```
-
-## Table 6. Race Distribution: Race1
-
+ 
 ```{r race , echo = F, include=T}
 race <-   demogCounts %>% 
             group_by(race1) %>% 
@@ -684,14 +732,7 @@ race <- within(merge(race,subset(valSets,tableName=='DEMOGRAPHICS' & columnName=
 })
 ```
 
-```{r tab6_disp, echo = F, include=T}
-knitr::kable(race[    c('race1', 'decode','count','countPct')], 
-            col.names = c("Value","Label","Frequency","Percent"), 
-            row.names=FALSE, 
-            format.args = list(big.mark = ","))
-```
 
-## Table 6.2. Race Distribution: Race2
 
 ```{r race2 , echo = F, include=T}
 race2 <-   demogCounts %>% 
@@ -706,14 +747,7 @@ race2 <- within(merge(race2,subset(valSets,tableName=='DEMOGRAPHICS' & columnNam
 })
 ```
 
-```{r tab6.2_disp, echo = F, include=T}
-knitr::kable(race2[    c('race2', 'decode','count','countPct')], 
-            col.names = c("Value","Label","Frequency","Percent"), 
-            row.names=FALSE, 
-            format.args = list(big.mark = ","))
-```
 
-## Table 6.3. Race Distribution: Race3
 ```{r race3 , echo = F, include=T}
 race3 <-   demogCounts %>% 
             group_by(race3) %>% 
@@ -727,16 +761,7 @@ race3 <- within(merge(race3,subset(valSets,tableName=='DEMOGRAPHICS' & columnNam
 })
 ```
 
-```{r tab6.3_disp, echo = F, include=T}
-knitr::kable(race3[    c('race3', 'decode','count','countPct')], 
-            col.names = c("Value","Label","Frequency","Percent"), 
-            row.names=FALSE, 
-            format.args = list(big.mark = ","))
-```
-
-
-## Table 6.4. Race Distribution: Race4
-
+ 
 ```{r race4 , echo = F, include=T}
 race4 <-   demogCounts %>% 
             group_by(race4) %>% 
@@ -750,15 +775,9 @@ race4 <- within(merge(race4,subset(valSets,tableName=='DEMOGRAPHICS' & columnNam
 })
 ```
 
-```{r tab6.4_disp, echo = F, include=T}
-knitr::kable(race4[    c('race4', 'decode','count','countPct')], 
-            col.names = c("Value","Label","Frequency","Percent"), 
-            row.names=FALSE, 
-            format.args = list(big.mark = ","))
-```
 
 
-## Table 6.5. Race Distribution: Race5
+
 ```{r race5 , echo = F, include=T}
 race5 <-   demogCounts %>% 
             group_by(race5) %>% 
@@ -772,16 +791,7 @@ race5 <- within(merge(race5,subset(valSets,tableName=='DEMOGRAPHICS' & columnNam
 })
 ```
 
-```{r tab6.5_disp, echo = F, include=T}
-knitr::kable(race5[    c('race5', 'decode','count','countPct')], 
-            col.names = c("Value","Label","Frequency","Percent"), 
-            row.names=FALSE, 
-            format.args = list(big.mark = ","))
-```
-
-
-
-## Table 6.6. Race1 by Race2 Bivariate Distribution
+ 
 ```{r race1xrace2_alt , echo = F, include=T}
  
 tab_race1race2 <- run_query(gsub("%DEMOGRAPHICS%", demographics, "
@@ -895,11 +905,10 @@ tab_race1race2 <- align(add_header_row(tab_race1race2, values = c("Race 1", "Rac
 
 tab_race1race2 <- flextable::vline(x = tab_race1race2, part = "all", border = fp_border(color = "black", style = "solid"))  %>% hline_bottom(border = fp_border(color = "black", style = "solid"), part = "header")
 
-knitr::knit_print(tab_race1race2)
-
+ 
 ```
 
-## Table 6.7. Race1 by Race3 Bivariate Distribution
+ 
 ```{r race1xrace3 , echo = F, include=T}
 
 tab_race1race3 <- run_query(gsub("%DEMOGRAPHICS%", demographics, "
@@ -1004,22 +1013,9 @@ category <- rownames(tab_race1race3)
 tab_race1race3 <- cbind("Race Group" = category, tab_race1race3)
 ```
 
-```{r tab6.7_disp, echo = F, include=T}
-#knitr::kable(tab_race1race3, format.args = list(big.mark = ","), row.names = FALSE) %>%     
-
-tab_race1race3 <- flextable(format(tab_race1race3, big.mark=",")) %>% set_table_properties(layout = "autofit")
-
-tab_race1race3 <- align(add_header_row(tab_race1race3, values = c("Race 1", "Race 3", " "), colwidths = c(1,6,1), top = FALSE), 
-                           align = "center", part = "header")
-
-tab_race1race3 <- flextable::vline(x = tab_race1race3, part = "all", border = fp_border(color = "black", style = "solid")) %>% hline_bottom(border = fp_border(color = "black", style = "solid"), part = "header")
-
-knitr::knit_print(tab_race1race3)
-```
+ 
 
 
-
-## Table 6.8. Race1 by Race4 Bivariate Distribution
 ```{r race1xrace4 , echo = F, include=T}
 
 tab_race1race4 <- run_query(gsub("%DEMOGRAPHICS%", demographics, "
@@ -1123,22 +1119,7 @@ category <- rownames(tab_race1race4)
 tab_race1race4 <- cbind("Race Group" = category, tab_race1race4)
 ```
 
-```{r tab6.8_disp, echo = F, include=T}
-#knitr::kable(tab_race1race4, format.args = list(big.mark = ","), row.names = FALSE) %>%     
-
-tab_race1race4 <- flextable(format(tab_race1race4, big.mark=",")) %>% set_table_properties(layout = "autofit")
-
-tab_race1race4 <- align(add_header_row(tab_race1race4, values = c("Race 1", "Race 4", " "), colwidths = c(1,6,1), top = FALSE), 
-                           align = "center", part = "header")
-
-tab_race1race4 <- flextable::vline(x = tab_race1race4, part = "all", border = fp_border(color = "black", style = "solid")) %>% hline_bottom(border = fp_border(color = "black", style = "solid"), part = "header")
-
-knitr::knit_print(tab_race1race4)
-```
-
-
-## Table 6.9. Race1 by Race5 Bivariate Distribution
-
+ 
 ```{r race1xrace5 , echo = F, include=T}
 
 tab_race1race5 <- run_query(gsub("%DEMOGRAPHICS%", demographics, "
@@ -1242,20 +1223,6 @@ category <- rownames(tab_race1race5)
 tab_race1race5 <- cbind("Race Group" = category, tab_race1race5)
 ```
 
-```{r tab6.9_disp, echo = F, include=T}
-#knitr::kable(tab_race1race5, format.args = list(big.mark = ","), row.names = FALSE) %>%     
-
-tab_race1race5 <- flextable(format(tab_race1race5, big.mark=",")) %>% set_table_properties(layout = "autofit")
-
-tab_race1race5 <- align(add_header_row(tab_race1race5, values = c("Race 1", "Race 5", " "), colwidths = c(1,6,1), top = FALSE), 
-                           align = "center", part = "header")
-
-tab_race1race5 <- flextable::vline(x = tab_race1race5, part = "all", border = fp_border(color = "black", style = "solid")) %>% hline_bottom(border = fp_border(color = "black", style = "solid"), part = "header")
-
-knitr::knit_print(tab_race1race5)
-```
-
-## Table 7. Hispanic Ethnicity Distribution
 
 ```{r ethnicity, echo = F, include=T}
 
@@ -1270,13 +1237,8 @@ ethn2 <- data.frame(Value = c("Y", "N", "U"),
                     Percent = c((ethn$Yes/tab1_dem$npats * 100), (ethn$No/tab1_dem$npats * 100), (ethn$Unknown/tab1_dem$npats * 100)))
 ```
 
-```{r tab7_disp, echo = F, include=T}
-knitr::kable(ethn2, digits = 2,
-            format.args = list(big.mark = ","))
-```
 
 
-## Table 7.1. Race1 by Hispanic Ethnicity Distribution
 ```{r race1xethnicity , echo = F, include=T}
 tab_race1hispanic <- run_query(gsub("%DEMOGRAPHICS%", demographics, "
 SET NOCOUNT ON;
@@ -1349,12 +1311,7 @@ category <- rownames(tab_race1hispanic)
 tab_race1hispanic <- cbind("Race Group" = category, tab_race1hispanic)
 ```
 
-```{r tab7.1_disp, echo = F, include=T}
-knitr::kable(tab_race1hispanic,
-             format.args = list(big.mark = ","), row.names = FALSE)
-```             
 
-## Table 7.2. Race2 by Hispanic Ethnicity where Race1 is Unknown
 
 ```{r race2xethnicity , echo = F, include=T}
 
@@ -1434,14 +1391,6 @@ category <- rownames(tab_race2hispanic)
 tab_race2hispanic <- cbind("Race Group" = category, tab_race2hispanic)
 ```
 
-```{r tab7.2_disp, echo = F, include=T}
-knitr::kable(tab_race2hispanic,
-             format.args = list(big.mark = ","), row.names = FALSE)
-
-```
-
-## Table 7.3. Race3 by Hispanic Ethnicity where Race1 is Unknown
-
 ```{r race3xethnicity , echo = F, include=T}
 
 tab_race3hispanic <- run_query(gsub("%DEMOGRAPHICS%", demographics, "
@@ -1520,13 +1469,7 @@ category <- rownames(tab_race3hispanic)
 tab_race3hispanic <- cbind("Race Group" = category, tab_race3hispanic)
 ```
 
-```{r tab7.3_disp, echo = F, include=T}
-knitr::kable(tab_race3hispanic,
-             format.args = list(big.mark = ","), row.names = FALSE)
-```        
 
-
-## Table 7.4. Race4 by Hispanic Ethnicity where Race1 is Unknown
 
 ```{r race4xethnicity , echo = F, include=T}
 
@@ -1606,12 +1549,7 @@ category <- rownames(tab_race4hispanic)
 tab_race4hispanic <- cbind("Race Group" = category, tab_race4hispanic)
 ```
 
-```{r tab7.4_disp, echo = F, include=T}
-knitr::kable(tab_race4hispanic,
-             format.args = list(big.mark = ","), row.names = FALSE)
-```        
 
-## Table 7.5. Race5 by Hispanic Ethnicity where Race1 is Unknown
 
 ```{r race5xethnicity , echo = F, include=T}
 
@@ -1689,12 +1627,6 @@ category <- rownames(tab_race5hispanic)
 tab_race5hispanic <- cbind("Race Group" = category, tab_race5hispanic)
 ```
 
-```{r tab7.5_disp, echo = F, include=T}
-knitr::kable(tab_race5hispanic,
-             format.args = list(big.mark = ","), row.names = FALSE)
-```
-
-## Table 7.6. Race1 by Hispanic Ethnicity where Primary Language is Spanish
 
 ```{r race1xethnicityxlang , echo = F, include=T}
 
@@ -1769,13 +1701,7 @@ category <- rownames(tab_race1lang)
 tab_race1lang <- cbind("Race Group" = category, tab_race1lang)
 ```
 
-```{r tab7.6_disp, echo = F, include=T}
-knitr::kable(tab_race1lang,
-             format.args = list(big.mark = ","), row.names = FALSE)
-```   
-
-## Table 7.7. Race2 by Hispanic Ethnicity where Primary Language is Spanish
-
+ 
 ```{r race2xethnicityxlang , echo = F, include=T}
 tab_race2lang <- run_query(gsub("%DEMOGRAPHICS%", demographics, "
 SET NOCOUNT ON;
@@ -1850,13 +1776,7 @@ category <- rownames(tab_race2lang)
 tab_race2lang <- cbind("Race Group" = category, tab_race2lang)
 ```
 
-```{r tab7.7_disp, echo = F, include=T}
-knitr::kable(tab_race2lang,
-             format.args = list(big.mark = ","), row.names = FALSE)
-```   
-
-## Table 7.8. Race3 by Hispanic Ethnicity where Primary Language is Spanish
-
+ 
 ```{r race3xethnicityxlang , echo = F, include=T}
 tab_race3lang <- run_query(gsub("%DEMOGRAPHICS%", demographics, "
 SET NOCOUNT ON;
@@ -1929,13 +1849,7 @@ category <- rownames(tab_race3lang)
 tab_race3lang <- cbind("Race Group" = category, tab_race3lang)
 ```
 
-```{r tab7.8_disp, echo = F, include=T}
-knitr::kable(tab_race3lang,
-             format.args = list(big.mark = ","), row.names = FALSE)
-```
-
-## Table 7.9. Race4 by Hispanic Ethnicity where Primary Language is Spanish
-
+ 
 ```{r race4xethnicityxlang , echo = F, include=T}
 tab_race4lang <- run_query(gsub("%DEMOGRAPHICS%", demographics, "
 SET NOCOUNT ON;
@@ -2008,13 +1922,7 @@ category <- rownames(tab_race4lang)
 tab_race4lang <- cbind("Race Group" = category, tab_race4lang)
 ```
 
-```{r tab7.9_disp, echo = F, include=T}
-knitr::kable(tab_race4lang,
-             format.args = list(big.mark = ","), row.names = FALSE)
-```   
-
-## Table 7.10. Race5 by Hispanic Ethnicity where Primary Language is Spanish
-
+ 
 ```{r race5xethnicityxlang , echo = F, include=T}
 tab_race5lang <- run_query(gsub("%DEMOGRAPHICS%", demographics, "
 SET NOCOUNT ON;
@@ -2087,14 +1995,7 @@ category <- rownames(tab_race5lang)
 tab_race5lang <- cbind("Race Group" = category, tab_race5lang)
 ```
 
-```{r tab7.10_disp, echo = F, include=T}
-knitr::kable(tab_race5lang,
-             format.args = list(big.mark = ","), row.names = FALSE)
-```   
-
-
-## Table 7.11. Unknown or Missing Race1 and Hispanic Ethnicity Over Time
-
+ 
 ```{r missing race/ethnicity over time, echo = F, include=T, eval=T}
 
 # create a temp table in the SQL DB temp drive, this will not be pulled into the R workspace.This pulls in the most recent encounter date and combines it with race and hispanic data from demographics
@@ -2136,31 +2037,22 @@ tab7.11_rowCnt <-sqlQuery(tempCon1, paste0("
     ORDER BY lastEnc.year")
 )
 
+tab7.11_totalCnt <-sqlQuery(tempCon1,
+                 paste("SELECT year(lastEnc) as year, count(*) as rowCnt",
+                       "FROM #encTmp1 GROUP BY year(lastEnc)",
+                       sep=" "
+                       )
+                )
+
 RODBC::odbcClose(tempCon1)
 
-tab7.11_combined <- tab7.11_rowCnt
+tab7.11_combined <- data.frame(cbind(tab7.11_rowCnt, tab7.11_totalCnt$rowCnt))
 
-tab7.11_combined$rowPct <- round(100*(tab7.11_combined$missingRowCnt/tab7.11_combined$rowCnt),1)
+tab7.11_combined$rowPct <- round(100*tab7.11_combined$rowCnt/tab7.11_combined$tab7.11_totalCnt.rowCnt,1)
 tab7.11_combined$year <- as.character(tab7.11_combined$year)
 ```
 
-```{r tab7.11_disp, echo = F, include=T}
-knitr::kable(tab7.11_combined[    c('year', 'missingRowCnt','rowCnt','rowPct')], 
-            col.names = c("Year","Frequency Unknown Race1 and Hispanic","Total Frequency","Percent Missing Race1 and Hispanic"), row.names=FALSE, 
-            format.args = list(big.mark = ","), align = 'c')
-```   
-  
-## Figure 1. Percent of Patients with Unknown Race1 and Hispanic Values by Year
-
-```{r tab7.11_fig, echo = F, include=T, dpi=500, fig.height=5, fig.width=8.5}
-
-ggplot(data = tab7.11_combined, aes(x = year, y = rowPct, group=1)) + geom_line() + geom_point() + ylab("Percent") + theme(axis.text.x = element_text(angle = 45, hjust = 1))
-
-```
-
-
-## Table 7.12. Unknown or Missing Race1 and Hispanic Ethnicity by Gender
-
+ 
 ```{r missing race/ethnicity by gender, echo = F, include=T}
 gender_re <- demogCounts[ which (demogCounts$race1=='UN' & demogCounts$hispanic=='U'),]
 
@@ -2177,15 +2069,7 @@ gender_re <- within(merge(gender_re,subset(valSets,columnName=='GENDER')[c('code
 })
 ```
 
-```{r tab7.12_disp, echo = F, include=T}
-knitr::kable(gender_re[    c('gender', 'decode','count','countPct')], 
-            col.names = c("Value","Label","Frequency","Percent"), row.names=FALSE, 
-            format.args = list(big.mark = ","))
-```
-
-
-## Table 7.13. Unknown or Missing Race1 and Hispanic Ethnicity by Age Group
-
+ 
 ```{r missing race/ethnicity by age, echo = F, include=T}
 tempCon2 <- get_connection()
 
@@ -2257,15 +2141,7 @@ tab7.13_combined <- data.frame(cbind(tab7.13_rowCnt, tab7.13_total$count))
 tab7.13_combined$rowPct <- round(100*tab7.13_combined$count/tab7.13_combined$tab7.13_total.count,1)
 ```
 
-```{r tab7.13_disp, echo = F, include=T}
-knitr::kable(tab7.13_combined[    c('ageCat', 'count','tab7.13_total.count','columnPct', 'rowPct')], 
-            col.names = c("Age Group","Frequency Missing Race1 & Hispanic","Total Frequency","Column Percent", "Row Percent"), row.names=FALSE, 
-            format.args = list(big.mark = ","))
-```
 
-## Table 7.14 Telehealth by CPTMOD and POS with Encounter Type
-
-### Table 7.14a ENCTYPE in 'TE', 'EM', 'TV', or 'TO' and POS = '02'
 ```{r telehealth_tab7.14a, echo = F, include=T}
 tab7.14a <- run_query(paste0("
 SELECT 
@@ -2298,11 +2174,10 @@ tab7.14a <- flextable(data = data.frame(format(tab7.14a, big.mark=",", scientifi
         flextable::align(align = "center", part = "all") %>%
         border(part = "all", border = fp_border(color = "black", style = "solid"))
 
-knitr::knit_print(tab7.14a)
 
 ```
 
-### Table 7.14b CPTMOD1, CPTMOD2, or CPTMOD3 IN 'GT' or '95' and POS = '02'
+
 ```{r telehealth_tab7.14b, echo = F, include=T}
 tab7.14b <- run_query(paste0("
 SELECT 
@@ -2340,10 +2215,9 @@ tab7.14b <- flextable(data = data.frame(format(tab7.14b, big.mark=",", scientifi
         flextable::align(align = "center", part = "all") %>%
         border(part = "all", border = fp_border(color = "black", style = "solid"))
 
-knitr::knit_print(tab7.14b)
 ```
 
-### Table 7.14c CPTMOD1, CPTMOD2, or CPTMOD3 IN 'GT' or '95' and ENCTYPE in 'TE', 'EM', 'TV', or 'TO'
+
 ```{r telehealth_tab7.14c, echo = F, include=T}
 tab7.14c <- run_query(paste0("
 SELECT 
@@ -2382,7 +2256,6 @@ tab7.14c <- flextable(data = data.frame(format(tab7.14c, big.mark=",", scientifi
         border(part = "all", border = fp_border(color = "black", style = "solid"))
 
 
-knitr::knit_print(tab7.14c)
 ```
 
 
@@ -2440,18 +2313,6 @@ nEncPats <- encSumm$personCnt
 
 
 
-## Examination of the ENCOUNTERS Table
-
-Total rows in the dataset: **`r format(encRows, big.mark=",")`**\
-Total unique combinations of the primary key: **`r format(encPrimKeyRows, big.mark=",")`**\
-Total patients in the encounter table: **`r format(nEncPats, big.mark=",")`**\
-Month and year of first encounter: **`r format(as.Date(encSumm$firstEnc),"%B %Y")`**\
-Month and year of last encounter: **`r format(as.Date(encSumm$lastEnc),"%B %Y")`**\
- **`r ifelse(encRows== encPrimKeyRows," ","*The encounter table has duplicate rows, by enc_id")`**
-
-
-## Table 8. Count of Distinct Patients by Age Group and Year of Utilization
-
 ```{r tab8, echo = F, include=T, eval=T}
  
 encPersonYear  <- sqlQuery(tempCon3,
@@ -2502,25 +2363,8 @@ encPersonAgeYear$toDisplay = paste0(format(encPersonAgeYear$Freq, big.mark = ","
 encPersonAgeYear_tx <- spread(encPersonAgeYear[c('ageCat','aYear','toDisplay')],aYear,toDisplay)
 ```
 
-```{r tab8_disp, echo = F, include=T}
-knitr::kable(encPersonAgeYear_tx, 
-             col.names=c("Age at First Encounter in CY, N(%)",names(encPersonAgeYear_tx)[-1]), 
-             row.names=FALSE, align = "c",
-             format.args = list(big.mark = ","))
-```
 
 
-Percentages are calculated with all patients within the calendar year as the denominator
-
-## Figure 2. Count of Distinct Patients by Age Group and Year of Utilization
-
-```{r fig2, echo = F, include=T, dpi=500, fig.height=5, fig.width=8.5}
-ggplot(data = encPersonAgeYear, aes(x =aYear, y = Freq, fill = ageCat)) + 
-  geom_bar(stat = "identity") + labs(y='Count', x='Year', fill='Age at encounter')+theme(axis.text.x = element_text(angle = 45, hjust = 1)) + 
-  scale_y_continuous(labels = function(x) format(x, big.mark = ",", scientific = FALSE))
-```
-
-## Table 9. Annual Trends in the Total Number of Recorded Encounters, the Mean Number of Encounters, the Mean Number of Patients and the Percent Change from the Previous Year, by Calendar Year
 
 ```{r tab9_res, echo = F, include=T}
 tab9 <- run_query( 
@@ -2550,9 +2394,6 @@ tab9_all <- left_join(tab9, tab9_avg_pats, by = "year") %>%
 tab9_all$year <- as.character(tab9_all$year)
 ```
 
-```{r tab9_dis, echo = F, include=T}
-kable(tab9_all, col.names = c("Year", "Total Number of Recorded Encounters", "Percent Change from Previous Year", "Total Number of Patients with at Least One Encounter", "Median Number of Encounters per Patient (Min, Max)"), format.args = list(big.mark = ","))
-```
 
 
 ```{r encounter types by year and month, echo = F, include=T}
@@ -2571,7 +2412,6 @@ encEncType_YM <- within(encEncType_YM,{
 ```
 
 
-## Table 10. Count of Encounters by Encounter Type 
 
 ```{r tab10, echo = F, include=T, eval=T}
 encEncType <- encEncType_YM %>% group_by(encType) %>% summarize(Freq = sum(rowCnt))
@@ -2585,12 +2425,7 @@ encEncType <- encEncType %>%
   select(-encType)
 ```
 
-```{r tab10_disp, echo = F, include=T}
-knitr::kable(encEncType, col.names=c("Encounter Type",'Number of Encounters','Percent of Total Encounters'), 
-             row.names=FALSE, 
-             format.args = list(big.mark = ","))
-```
-
+ 
 
 ```{r encByYear, echo = F, include=T}
 encByYear <- encEncType_YM %>% group_by(aYear ) %>% summarize(Freq = sum(rowCnt))
@@ -2645,23 +2480,7 @@ fig3_timeTest <- within(fig3_timeTest,{decode <- ifelse(!is.na(decode),decode, i
 ```
 
 
-## Figure 3a. Ambulatory Encounters by Year and Month
-
-```{r fig3a, echo = F, include=T, echo = F, include=T, dpi=500, fig.height=5, fig.width=8.5}
-ggplot(subset(encTypeBymonYr,encType == 'AV'), aes(adate_YM, rowCnt)) + geom_line() +
-  scale_x_date(date_labels = "%b %y",date_breaks='1 year') + xlab("Month of encounter") + ylab("Frequency")+theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
-  geom_point(data=subset(fig3_timeTest, iqrTest==T & outcome=='AV') %>% rename(adate_YM=testMonth, rowCnt=Freq2), aes(adate_YM, rowCnt))
-```
-
-## Figure 3b. Other Encounter Types by Year and Month
-
-```{r fig3b, echo = F, include=T, echo = F, include=T, dpi=500, fig.height=5, fig.width=8.5}
-ggplot(subset(encTypeBymonYr,encType != 'AV'), aes(adate_YM, rowCnt, colour=decode)) + geom_line() +
-  scale_x_date(date_labels = "%b %y",date_breaks='1 year') + xlab("Month of encounter") + ylab("Frequency")+theme(axis.text.x = element_text(angle = 45, hjust = 1))+labs(color='Encounter type')+
-  geom_point(data=subset(fig3_timeTest, iqrTest==T & outcome !='AV') %>% rename(adate_YM=testMonth, rowCnt=Freq2), aes(adate_YM, rowCnt, colour=decode))
-#,legend.position="bottom" "
-```
-
+ 
  
 ```{r encTypeByYr, echo = F, include=T}
 #
@@ -2673,7 +2492,6 @@ encTypeByYr <- within(encTypeByYr,{decode <- ifelse(!is.na(decode),decode, ifels
 ```
 
 
-## Examination of the CENSUS_LOCATION Table
 
 ```{r census location, echo = F, include=T}
 locSumm  <- run_query(
@@ -2715,17 +2533,7 @@ multLastLocs <- sqlQuery(tempCon4,
 odbcClose(tempCon4)
 ```
 
-Total rows in the dataset: **`r format(locSumm$rowCnt, big.mark=",")`**\
-Total unique combinations of the primary key: **`r format(locSumm$primKeyCnt, big.mark=",")`**\
-Total patients in the location table: **`r format(locSumm$personCnt, big.mark=",")`**\
-Month and year of first location: **`r format( as.Date(locSumm$firstDT),"%B %Y")`**\
-Month and year of last location: **`r format(as.Date(locSumm$lastDT),"%B %Y")`**\
-**`r ifelse(locSumm$rowCnt==locSumm$primKeyCnt," ","*The Census Location table has duplicate rows, by person_id and loc_start")`**\
-**`r format(multLastLocs$patsMultLoc, big.mark=",")`** patients have more than one most recent location record\
-
-
-## Table 11. Count of Unique Patients by Colorado County, Based on Most Recent Location
-
+ 
 ```{r lastLocation, echo = F, include=T, echo = F, include=T, eval=T}
 lastLocation <- merge(lastLocation, stateCnty[c('stateCnty','stCntyNm')], by = 'stateCnty', all.x=T) %>% arrange(desc(Freq)) %>% 
                 mutate(pct = round(100*Freq/sum(Freq),1),
@@ -2733,24 +2541,7 @@ lastLocation <- merge(lastLocation, stateCnty[c('stateCnty','stCntyNm')], by = '
                      )
 ```
 
-```{r tab11_disp, echo = F, include=T}
-coloradoLoc <- subset(lastLocation, stCntyNm != "Invalid" & stCntyNm != "Missing" & substr(stCntyNm, 1, 2) == '08')
 
-nonColoradoLoc <- subset(lastLocation, stCntyNm == "Invalid")
-missingLoc <- subset(lastLocation, stCntyNm == "Missing")
-
-knitr::kable(coloradoLoc[c('stateCnty','stCntyNm','Freq','pct')], 
-             col.names=c('State/county code','State: county','Frequency','Percent'), 
-             row.names=FALSE, 
-             format.args = list(big.mark = ","))
-```
-
-Count of Non-Colorado Locations: **`r format(sum(nonColoradoLoc$Freq), big.mark=",")`**\
-Percentage of Non-Colorado Locations: **`r sum(nonColoradoLoc$pct)`**\
-Count of Locations Missing: **`r format(sum(missingLoc$Freq), big.mark=",")`**\
-Percentage of Locations Missing: **`r format(sum(missingLoc$pct), big.mark=",")`**\
-
-## Examination of the DIAGNOSES Table
 
 ```{r diagSumm, echo = F, include=T}
 diagSumm  <- run_query(
@@ -2763,18 +2554,6 @@ diagSumm  <- run_query(
                  )
 ```
 
-Total rows in the dataset: **`r format(diagSumm$rowCnt, big.mark=",")`**\
-Total unique combinations of the primary key: **`r format(diagSumm$primKeyCnt, big.mark=",")`**\
-Total patients in the table: **`r format(diagSumm$personCnt, big.mark=",")`**\
-Month and year of first diagnosis: **`r format( as.Date(diagSumm$firstDT),"%B %Y")`**\
-Month and year of last diagnosis: **`r format( as.Date(diagSumm$lastDT),"%B %Y")`**\
-**`r ifelse( diagSumm$rowCnt==diagSumm$primKeyCnt," ","*The table has duplicate rows, by enc_id dx adate diagprovider")`**\
-
-The following tables explore the contents of the DIAGNOSES table with a focus on trends over time and most common types of diagnoses.
-
-## Table 12. Annual Trends in the Total Number of Recorded Billing Diagnoses, the Mean Number of Encounters, the Mean Number of Patients and the Percent Change from the Previous Year, by Calendar Year
-
-This table examines the volume of diagnoses over time and the number of patients with encounters represented in the DIAGNOSES table. Average number of diagnoses per encounter, and per patient, are calculated to compare diagnosis volume trends over time.
 
 ```{r tab12_res, echo = F, include=T}
 tab12 <- run_query( 
@@ -2826,9 +2605,6 @@ tab12_add <- tab12 %>%
 tab12_add$year <- as.character(tab12_add$year)
 ```
 
-```{r tab12_dis, echo = F, include=T}
-kable(tab12_add, col.names = c("Year", "Total Number of Recorded Diagnoses", "Percent Change from Previous Year", "Total Number of Encounters with 1+ Diagnosis", "Total Number of Unique Patients with 1+ Diagnosis", "Median Number of Diagnoses per Encounter (Min, Max)", "Median Number of Diagnoses per Patient (Min, Max)"), format.args = list(big.mark = ","))
-```
 
 
 ```{r tab13_years, echo = F, include=T}
@@ -2844,9 +2620,6 @@ tab_2_Last_Recent_Years <- tab_2_Last_Recent_Years_f()
 ```
 
 
-## Table 13. Summary  of the Ten Most Common Billing Diagnosis Codes, by All or Ambulatory Encounter Type ( `r paste0(tab_2_Last_Recent_Years[[1]], " & ", tab_2_Last_Recent_Years[[2]])`)
-
-These tables include information on the ten most common diagnoses recorded in your DIAGNOSES table. Data on diagnosis codes, types, counts and patients are presented for all encounters and for ambulatory only encounters (ENCTYPE=AV).
 
 ```{r tab13_res, echo = F, include=T}
 
@@ -2887,18 +2660,8 @@ tab13_all <- bind_cols(tab13_dxall, tab13_dxav)
 ```
 
 
-```{r tab13a_disp, echo = F, include=T}
-kable(tab13_dxall, col.names = c("Diagnosis Code", "Code Type", "Diagnosis Description", "Number of Recorded Diagnoses", "Number of Patients"), format.args = list(big.mark = ","))
 
-```
-\newline
-```{r tab13b_disp, echo = F, include=T}
-kable(tab13_dxav, col.names = c("Diagnosis Code for AV", "Diagnosis Type for AV", "Diagnosis Description", "Number of Recorded Diagnosis for AV", "Number of Patients for AV"), format.args = list(big.mark = ","))
-```
  
-## Table 14. Summary of the Ten Most Common Billing Diagnoses by Diagnosis Code Type, Total Number of Recorded Diagnoses and Total Number of Recorded Patients
-This table includes information on the ten most common diagnoses recorded in your DIAGNOSES table. Data on diagnosis codes, counts and patients are presented for ICD-9 and ICD-10.
-
 ```{r tab14_res, echo = F, include=T}
 tab14_09 <- run_query( 
   paste0("select top 10 dx,
@@ -2923,33 +2686,7 @@ tab14_10 <- run_query(
 
 ```
 
-```{r tab14_disp, echo = F, include=T}
-#if and else statements are used to determine if the respective table has any
-#rows. If not, then an error message is written indicating so.
-if (nrow(tab14_09) != 0){
-  tab14_09 <-  
-    mutate(.data=tab14_09,
-      dxCode  = paste(dx_codetype,'-',gsub('.','',dx, fixed=T), sep='')
-      )
-  tab14_09 <- left_join(x = tab14_09, y=icdLU, by = "dxCode")
-  tab14_09 <-select(.data = tab14_09, dx, Description, nrows_all, npats)
-  kable(tab14_09, col.names = c("Diagnosis","Diagnosis Description", "Records", "Patients"), caption = "Diagnosis Code Type = 09", format.args = list(big.mark = ","))
-} else {
-  knitr::knit_print("Table had zero rows.  DX_CODETYPE = '09' likely isn't a category for this variable.")
-} 
-if (nrow(tab14_10) != 0){
-  tab14_10 <- 
-    mutate(.data = tab14_10,
-      dxCode  = paste(dx_codetype,'-',gsub('.','',dx, fixed=T), sep='')
-      )
-  tab14_10 <- left_join(x=tab14_10, y=icdLU, by = "dxCode")
-  tab14_10 <- select(.data = tab14_10, dx, Description, nrows_all, npats)
-  kable(tab14_10, col.names = c("Diagnosis", "Diagnosis Description", "Records", "Patients"), caption = "Diagnosis Code Type = 10", format.args = list(big.mark = ","))
-} else {
-   knitr::knit_print("Table had zero rows.  DX_CODETYPE = '10' likely isn't a category for this variable.")
-} 
-```
-
+ 
 
 ```{r monthly counts by enc type, echo = F, include=T}
 dxByMonEncTp <- run_query(
@@ -2978,25 +2715,8 @@ fig4_timeTest <- within(fig4_timeTest,{decode <- ifelse(!is.na(decode),decode, i
 
 ```
 
-## Figure 4a. Count of Billing Diagnoses by Year and Month in Ambulatory Encounters 
-
-```{r Count of diagnoses by year and month in ambulatory encounters, echo = F, include=T, dpi=500, fig.height=5, fig.width=8.5}
-ggplot(subset(dxByMonEncTp,encType == 'AV'), aes(monYr, Freq)) + geom_line(size=.75) +
-  scale_x_date(date_labels = "%b %y",date_breaks='1 year') + xlab("Month of encounter") + ylab("Frequency")+theme(axis.text.x = element_text(angle = 45, hjust = 1)) +  scale_color_brewer(palette ="Paired") +
-  geom_point(data=subset(fig4_timeTest, iqrTest==T & outcome=='AV') %>% rename(monYr=testMonth, rowCnt=Freq2), aes(monYr, rowCnt))
-```
-
-## Figure 4b. Count of Billing Diagnoses by Year and Month, other Encounter Types
-
-```{r Count of diagnoses by year and month other encounter types, echo = F, include=T, dpi=500, fig.height=5, fig.width=8.5}
-ggplot(subset(dxByMonEncTp,encType != 'AV'), aes(monYr, Freq, colour=decode)) + geom_line(size=.75) +
-  scale_x_date(date_labels = "%b %y",date_breaks='1 year') + xlab("Month of encounter") + ylab("Frequency")+theme(axis.text.x = element_text(angle = 45, hjust = 1),legend.position="bottom")+labs(color='Encounter type') + scale_color_brewer(palette ="Paired") +
-  geom_point(data=subset(fig4_timeTest, iqrTest==T & outcome !='AV') %>% rename(monYr=testMonth, rowCnt=Freq2), aes(monYr, rowCnt, colour=decode))
-
-```
 
 
-## Examination of the VITAL_SIGNS Table
 
 ```{r vital_signs table Table, echo = F, include=T }
 vitalSumm  <- run_query(
@@ -3008,15 +2728,6 @@ vitalSumm  <- run_query(
                  )
 ```
 
-Total rows in the dataset: **`r format(vitalSumm$rowCnt, big.mark=",")`**\
-Total unique combinations of the primary key: **`r format(vitalSumm$primKeyCnt, big.mark=",")`**\
-Total patients in the table: **`r format(vitalSumm$personCnt, big.mark=",")`**\
-Month and year of first record: **`r format(as.Date(vitalSumm$firstDT),"%B %Y")`**\
-Month and year of last record: **`r format(as.Date(vitalSumm$lastDT),"%B %Y")`**\
-**`r ifelse(vitalSumm$rowCnt==vitalSumm$primKeyCnt," ","*The table has duplicate rows, by person_id, measure_date, measure_time")`**\
-
-
-## Table 15. Vital Signs Summary
 
 ```{r vital signs summary, echo = F, include=T}
 # be sure to include space breaks in any re-design
@@ -3093,15 +2804,8 @@ vlst <- within(vlst,{
   q3      <- round(as.numeric(q3),1)
   maximum <- round(as.numeric(maximum),1)
 })
-knitr::kable(vlst[c('variable','nobs','npats','minimum','q1','median','q3', 'maximum')], 
-             col.names=c('Vital record','Greater Than 0 Obs','Unique patients with Greater Than 0 Obs','Minimum','Q1','Median','Q3', 'Maximum'), 
-             row.names=FALSE, 
-             format.args = list(big.mark = ","))
 ```
 
-## Table 16. Annual Trends in the Total Number of Recorded Vital Sign Records, the Mean Number of Encounters, the Mean Number of Patients and the Percent Change from the Previous Year, by Calendar Year
-
-This table examines the volume of vital signs over time and the number of patients with encounters represented in the VITAL_SIGNS table. Average number of vital signs per encounter, and per patient, are calculated to compare vital signs volume trends over time; and also to indicate whether or not vital signs are captured in one row or multiple rows for each encounter.
 
 ```{r trends in the number of recorded vital signs, tab16_res, echo = F, include=T}
 tab16 <- run_query( 
@@ -3150,14 +2854,7 @@ tab16_add <- tab16 %>%
 tab16_add$year <- as.character(tab16_add$year)
 ```
 
-```{r tab15_dis, echo = F, include=T}
-kable(tab16_add, col.names = c("Year", "Total Number of Recorded Vitals", "Percent Change from Previous Year", "Total Number of Encounters with Vital_Signs", "Total Number of Patients with Vitals", "Median Number of Vitals per Encounter (Min, Max)", "Median Number of Vitals per Patient (Min, Max)"), format.args = list(big.mark = ","))
-```
-
-\newpage
-
-## Figure 5. Count of Vital Signs by Year and Month
-
+ 
 ```{r Count of vital signs by year and month, echo=F, dpi=500, include=T, fig.show="hold", fig.height=3.25, fig.width=4.75, fig.align='center', out.width="50%"}
 vitalsByMonYr <- run_query(
                  paste0("SELECT year(measure_date) as year
@@ -3182,54 +2879,8 @@ fig5_timeTest <-  timeTest(time=as.Date(vitalsByMonYrTx$monYr),
                            Freq=vitalsByMonYrTx$Count, 
                            outcome=vitalsByMonYrTx$Vital_record)
 
-ggplot(subset(vitalsByMonYrTx, Vital_record=="height"), 
-    aes(monYr, Count, colour=Vital_record)) + 
-      geom_line() +
-      ggtitle("Height") +
-      scale_x_date(date_labels = "%b %y",date_breaks='1 year') +
-      xlab("Month of encounter") +
-      ylab("Frequency") +
-      theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
-      labs(color='Vital type') +
-      theme(legend.position='none') +
-  geom_point(data=subset(fig5_timeTest, iqrTest==T & outcome=="height" ) %>% rename(monYr=testMonth, Count=Freq2, Vital_record = outcome), aes(monYr, Count, colour=Vital_record))
-
-ggplot(subset(vitalsByMonYrTx, Vital_record=="weight"), 
-    aes(monYr, Count, colour=Vital_record)) + 
-      geom_line() + 
-      ggtitle("Weight") + 
-      scale_x_date(date_labels = "%b %y",date_breaks='1 year') + 
-      xlab("Month of encounter") + 
-      ylab("Frequency")+theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
-      labs(color='Vital type') +
-      theme(legend.position='none') +
-  geom_point(data=subset(fig5_timeTest, iqrTest==T & outcome=="weight" ) %>% rename(monYr=testMonth, Count=Freq2, Vital_record = outcome), aes(monYr, Count, colour=Vital_record))
-
-ggplot(subset(vitalsByMonYrTx, Vital_record=="systolic"), 
-    aes(monYr, Count, colour=Vital_record)) +
-      geom_line() +
-      ggtitle("Systolic") +
-      scale_x_date(date_labels = "%b %y",date_breaks='1 year') +
-      xlab("Month of encounter") +
-      ylab("Frequency")+theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
-      labs(color='Vital type') +
-      theme(legend.position='none') +
-  geom_point(data=subset(fig5_timeTest, iqrTest==T & outcome=="systolic" ) %>% rename(monYr=testMonth, Count=Freq2, Vital_record = outcome), aes(monYr, Count, colour=Vital_record))
-
-ggplot(subset(vitalsByMonYrTx, Vital_record=="diastolic"), 
-    aes(monYr, Count, colour=Vital_record)) +
-      geom_line() +
-      ggtitle("Diastolic") +
-      scale_x_date(date_labels = "%b %y",date_breaks='1 year') +
-      xlab("Month of encounter") +
-      ylab("Frequency") +
-      theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
-      labs(color='Vital type') +
-      theme(legend.position='none') +
-  geom_point(data=subset(fig5_timeTest, iqrTest==T & outcome=="diastolic" ) %>% rename(monYr=testMonth, Count=Freq2, Vital_record = outcome), aes(monYr, Count, colour=Vital_record))
 ```
 
-## Table 17. BENEFIT Table Information
 
 ```{r tab17_res, echo = F, include=T}
  
@@ -3270,7 +2921,6 @@ tab17$year <- as.character(tab17$year)
 
 ```
 
-## Table 17 Benefit Summary
 
 ```{r tab17, echo = F, include=T}
 #kable(tab17, col.names = c("Year", "Records", "Correctional Care", "Commercial/Private Insurance",  "CHIP", "Medicare", #"Medicaid", "Other Govt. Insurance", "No Coverage", "Other Insurance", "Unknown", "Workers Comp", "NA", "Not CHORDS #Categorized"), align = 'c', format.args = list(big.mark = ","))
@@ -3295,7 +2945,6 @@ tab17 <- flextable(format(tab17, big.mark=",")) %>%
         flextable::align(align = "center", part = "all") %>%
         border_inner(part = "all", border = fp_border(color = "black", style = "solid"))
 
-knitr::knit_print(tab17)
 ```
 
 ```{r tabScreenYear,echo = F, include=T}
@@ -3314,7 +2963,6 @@ tabBenefit_years <- tabBenefit_years_f()
 
 ```
 
-## Table 17.1: Benefit Category (Row) by Benefit Type (Column)
 
 ```{r tab17.1, echo=FALSE, echo = F, include=T}
 tab17_1 <- run_query(paste0(
@@ -3348,7 +2996,7 @@ SELECT
 			WHEN d.BENEFIT_CAT = 'CO'
 				THEN 'CO (Commercial/Private Insurance)'
 			WHEN d.BENEFIT_CAT = 'CP'
-				THEN 'CP (Children’s Health Insurance Program)'
+				THEN 'CP (Children?s Health Insurance Program)'
 			WHEN d.BENEFIT_CAT = 'MC'
 				THEN 'MC (Medicare)'
 			WHEN d.BENEFIT_CAT = 'MD'
@@ -3376,10 +3024,8 @@ FROM CTE_BENEFIT_DATA d
  JOIN CTE_BENEFITS_TOTAL t on t.BENEFIT_CAT = d.BENEFIT_CAT;"
   , sep = ''))
 
-kable(tab17_1)
 ```
 
-## Table 17.2: Benefit Records per Person by Year for the Past 5 Years (`r paste0(tabBenefit_years[[1]], " - ", tabBenefit_years[[5]])`)
 
 ```{r tab17.2, echo=FALSE, echo = F, include=T}
 tab17_2 <- run_query(paste0(
@@ -3433,11 +3079,9 @@ FROM #benefit_records_person a
 JOIN #benefit_records_person_median b ON a.BENEFIT_YEAR = b.BENEFIT_YEAR
 ORDER BY BENEFIT_YEAR asc;", sep = ''))
 
-kable(tab17_2)
 ```
 
-## Table 17.3: Benefit Records per Encounter by Year for Past 5 Years (`r paste0(tabBenefit_years[[1]], " - ", tabBenefit_years[[5]])`)
-
+ 
 ```{r tab17.3, echo=FALSE, echo = F, include=T}
 tab17_3 <- run_query(paste0(
   "SET NOCOUNT ON;
@@ -3489,10 +3133,9 @@ JOIN #benefit_records_encounter_median b ON a.BENEFIT_YEAR = b.BENEFIT_YEAR
 ORDER BY BENEFIT_YEAR asc;", sep = ''))
 
 
-kable(tab17_3)
 ```
 
-## Table 17.4: Benefit Categories per Person by Year for the Past 5 Years(`r paste0(tabBenefit_years[[1]], " - ", tabBenefit_years[[5]])`)
+
 ```{r tab17.4, echo=FALSE, echo = F, include=T}
 tab17_4 <- run_query(paste0(
   "SET NOCOUNT ON;
@@ -3545,10 +3188,8 @@ ORDER BY BENEFIT_YEAR asc;
 "
   , sep =''))
 
-kable(tab17_4)
 ```
 
-## Table 18. LINKAGE Table Information
 
 ```{r tab18.0, echo=FALSE, echo = F, include=T}
 tab18 <- run_query(
@@ -3556,7 +3197,614 @@ tab18 <- run_query(
                           COUNT(DISTINCT CID) as nlink
                           FROM ", linkage))
 
+```
+
+
+
+## Data Quality Report Results
+
+## QA Alerts
+
+```{r validationMessage Output, echo = F}
+if(nrow(QA_Alert_Messages)==0) {QA_Alert_Messages[nrow(QA_Alert_Messages) + 1,] = 'No specific alerts noted'}
+
+knitr::kable(QA_Alert_Messages, row.names = FALSE)
+```
+
+\pagebreak
+
+## Table 1. Records, Patients, Encounters, and Date Ranges by Table
+
+This table contains summary counts and date ranges by table. Distinct encounters and patients are shown for applicable tables. Data ranges should be used to compare data time windows between tables.
+
+```{r tab1_disp, echo = F, include=T}
+kable(tab1_all, col.names = c("Table", "Records", "Patients", "Encounters", "Date Field", "Min Date", "Max Date"), align = 'c', format.args = list(big.mark = ","))
+  
+```
+
+## Table 2. Missingness Variables across P1 Tables
+
+This table contains record counts for null and unknown values across P1 tables.
+
+```{r tab2_disp, echo = F, include=T}
+kable(tab2_all, col.names = c("Table", "Variable", "Null Records", "Percent of Records Null", "'Unknown' or 'No Information' Records", "Percent of Records 'Unknown' or 'No Information'"), digits = 2, format.args = list(big.mark = ","))
+```
+
+
+## Examination of the DEMOGRAPHICS Table
+
+## Table 3. Overall Demographics
+
+
+```{r tab3_disp, echo = F, include=T}
+knitr::kable(demogTable, col.names=c("Characteristic","Frequency","Percent of unique patients"), row.names=FALSE, format.args = list(big.mark = ","))
+```
+
+**`r if(exists("demogSummary")){ifelse(demogSummary$nDemogRows==demogSummary$nPatsDemog," ","The demographics table has duplicate rows, by person_id")}`**
+
+## Table 4. Top 5 Patient Primary Languages
+
+
+```{r tab4_disp, echo = F, include=T}
+knitr::kable(primLang[1:5, c('primary_language', 'InEnglish','langCnt','langPct')], 
+            col.names=     c("ISO Language","Language name ","Frequency","Percent"), 
+            row.names=FALSE, 
+            format.args = list(big.mark = ","))
+```
+
+## Table 4.1. Other and Unknown Language Count 
+
+```{r tab4.1_disp, echo = F, include=T}
+
+knitr::kable(unkLang[1:3, c('langCnt','langPct')], 
+            col.names=     c("Frequency","Percent"), 
+            row.names= T, 
+            format.args = list(big.mark = ","))
+
+```
+
+## Table 5. Gender Distribution 
+
+
+```{r tab5_disp, echo = F, include=T}
+knitr::kable(gender[    c('gender', 'decode','count','countPct')], 
+            col.names = c("Value","Label","Frequency","Percent"), row.names=FALSE, 
+            format.args = list(big.mark = ","))
+```
+
+## Table 5.1. Gender Identity Distribution 
+
+```{r tab5.1_disp, echo = F, include=T}
+ 
+knitr::kable(gender_identity[c('gender_identity','count','countPct')], 
+            col.names = c('Gender_Identity',"Frequency", "Percent"), 
+            row.names=F, 
+            format.args = list(big.mark = ","))
+```
+
+## Table 5.2. Gender Identity by Gender Distribution 
+
+```{r tab5.2_disp, echo = F, include=T}
+
+knitr::kable(tab_gender_identity[c('Gender Identity','Male','Percent_Male', 'Female', 'Percent_Female', 'Unknown Gender', 'Total Frequency')], 
+            col.names = c('Gender Identity','Male','Percent Male', 'Female', 'Percent Female', 'Unknown Gender', 'Total Frequency'), 
+            row.names=F, 
+            format.args = list(big.mark = ","))
+```
+
+## Table 5.3. Sexual Orientation Distribution 
+
+```{r tab5.3_disp, echo = F, include=T}
+knitr::kable(sexual_orientation[c( 'sexual_orientation','count','countPct')], 
+            col.names = c('Sexual Orientation',"Frequency", "Percent"), 
+            row.names=F, 
+            format.args = list(big.mark = ","))
+```
+
+## Table 6. Race Distribution: Race1
+```{r tab6_disp, echo = F, include=T}
+knitr::kable(race[    c('race1', 'decode','count','countPct')], 
+            col.names = c("Value","Label","Frequency","Percent"), 
+            row.names=FALSE, 
+            format.args = list(big.mark = ","))
+```
+
+## Table 6.2. Race Distribution: Race2
+```{r tab6.2_disp, echo = F, include=T}
+knitr::kable(race2[    c('race2', 'decode','count','countPct')], 
+            col.names = c("Value","Label","Frequency","Percent"), 
+            row.names=FALSE, 
+            format.args = list(big.mark = ","))
+```
+
+## Table 6.3. Race Distribution: Race3
+```{r tab6.3_disp, echo = F, include=T}
+knitr::kable(race3[    c('race3', 'decode','count','countPct')], 
+            col.names = c("Value","Label","Frequency","Percent"), 
+            row.names=FALSE, 
+            format.args = list(big.mark = ","))
+```
+
+
+## Table 6.4. Race Distribution: Race4
+```{r tab6.4_disp, echo = F, include=T}
+knitr::kable(race4[    c('race4', 'decode','count','countPct')], 
+            col.names = c("Value","Label","Frequency","Percent"), 
+            row.names=FALSE, 
+            format.args = list(big.mark = ","))
+```
+
+## Table 6.5. Race Distribution: Race5
+```{r tab6.5_disp, echo = F, include=T}
+knitr::kable(race5[    c('race5', 'decode','count','countPct')], 
+            col.names = c("Value","Label","Frequency","Percent"), 
+            row.names=FALSE, 
+            format.args = list(big.mark = ","))
+```
+
+
+
+## Table 6.6. Race1 by Race2 Bivariate Distribution
+```{r tab6.6_disp output, echo = F, include=T}
+ 
+knitr::knit_print(tab_race1race2)
+
+```
+
+## Table 6.7. Race1 by Race3 Bivariate Distribution
+```{r tab6.7_disp, echo = F, include=T}
+#knitr::kable(tab_race1race3, format.args = list(big.mark = ","), row.names = FALSE) %>%     
+
+tab_race1race3 <- flextable(format(tab_race1race3, big.mark=",")) %>% set_table_properties(layout = "autofit")
+
+tab_race1race3 <- align(add_header_row(tab_race1race3, values = c("Race 1", "Race 3", " "), colwidths = c(1,6,1), top = FALSE), 
+                           align = "center", part = "header")
+
+tab_race1race3 <- flextable::vline(x = tab_race1race3, part = "all", border = fp_border(color = "black", style = "solid")) %>% hline_bottom(border = fp_border(color = "black", style = "solid"), part = "header")
+
+knitr::knit_print(tab_race1race3)
+```
+
+## Table 6.8. Race1 by Race4 Bivariate Distribution
+```{r tab6.8_disp, echo = F, include=T}
+#knitr::kable(tab_race1race4, format.args = list(big.mark = ","), row.names = FALSE) %>%     
+
+tab_race1race4 <- flextable(format(tab_race1race4, big.mark=",")) %>% set_table_properties(layout = "autofit")
+
+tab_race1race4 <- align(add_header_row(tab_race1race4, values = c("Race 1", "Race 4", " "), colwidths = c(1,6,1), top = FALSE), 
+                           align = "center", part = "header")
+
+tab_race1race4 <- flextable::vline(x = tab_race1race4, part = "all", border = fp_border(color = "black", style = "solid")) %>% hline_bottom(border = fp_border(color = "black", style = "solid"), part = "header")
+
+knitr::knit_print(tab_race1race4)
+```
+
+
+## Table 6.9. Race1 by Race5 Bivariate Distribution
+
+```{r tab6.9_disp, echo = F, include=T}
+#knitr::kable(tab_race1race5, format.args = list(big.mark = ","), row.names = FALSE) %>%     
+
+tab_race1race5 <- flextable(format(tab_race1race5, big.mark=",")) %>% set_table_properties(layout = "autofit")
+
+tab_race1race5 <- align(add_header_row(tab_race1race5, values = c("Race 1", "Race 5", " "), colwidths = c(1,6,1), top = FALSE), 
+                           align = "center", part = "header")
+
+tab_race1race5 <- flextable::vline(x = tab_race1race5, part = "all", border = fp_border(color = "black", style = "solid")) %>% hline_bottom(border = fp_border(color = "black", style = "solid"), part = "header")
+
+knitr::knit_print(tab_race1race5)
+```
+
+## Table 7. Hispanic Ethnicity Distribution
+```{r tab7_disp, echo = F, include=T}
+knitr::kable(ethn2, digits = 2,
+            format.args = list(big.mark = ","))
+```
+
+
+## Table 7.1. Race1 by Hispanic Ethnicity Distribution
+```{r tab7.1_disp, echo = F, include=T}
+knitr::kable(tab_race1hispanic,
+             format.args = list(big.mark = ","), row.names = FALSE)
+```             
+
+## Table 7.2. Race2 by Hispanic Ethnicity where Race1 is Unknown
+```{r tab7.2_disp, echo = F, include=T}
+knitr::kable(tab_race2hispanic,
+             format.args = list(big.mark = ","), row.names = FALSE)
+
+```
+
+## Table 7.3. Race3 by Hispanic Ethnicity where Race1 is Unknown
+```{r tab7.3_disp, echo = F, include=T}
+knitr::kable(tab_race3hispanic,
+             format.args = list(big.mark = ","), row.names = FALSE)
+```        
+
+
+## Table 7.4. Race4 by Hispanic Ethnicity where Race1 is Unknown
+
+```{r tab7.4_disp, echo = F, include=T}
+knitr::kable(tab_race4hispanic,
+             format.args = list(big.mark = ","), row.names = FALSE)
+```        
+
+## Table 7.5. Race5 by Hispanic Ethnicity where Race1 is Unknown
+
+```{r tab7.5_disp, echo = F, include=T}
+knitr::kable(tab_race5hispanic,
+             format.args = list(big.mark = ","), row.names = FALSE)
+```
+
+## Table 7.6. Race1 by Hispanic Ethnicity where Primary Language is Spanish
+```{r tab7.6_disp, echo = F, include=T}
+knitr::kable(tab_race1lang,
+             format.args = list(big.mark = ","), row.names = FALSE)
+```   
+
+## Table 7.7. Race2 by Hispanic Ethnicity where Primary Language is Spanish
+```{r tab7.7_disp, echo = F, include=T}
+knitr::kable(tab_race2lang,
+             format.args = list(big.mark = ","), row.names = FALSE)
+```   
+
+## Table 7.8. Race3 by Hispanic Ethnicity where Primary Language is Spanish
+```{r tab7.8_disp, echo = F, include=T}
+knitr::kable(tab_race3lang,
+             format.args = list(big.mark = ","), row.names = FALSE)
+```
+
+## Table 7.9. Race4 by Hispanic Ethnicity where Primary Language is Spanish
+```{r tab7.9_disp, echo = F, include=T}
+knitr::kable(tab_race4lang,
+             format.args = list(big.mark = ","), row.names = FALSE)
+```   
+
+## Table 7.10. Race5 by Hispanic Ethnicity where Primary Language is Spanish
+```{r tab7.10_disp, echo = F, include=T}
+knitr::kable(tab_race5lang,
+             format.args = list(big.mark = ","), row.names = FALSE)
+```   
+
+
+## Table 7.11. Unknown or Missing Race1 and Hispanic Ethnicity Over Time
+```{r tab7.11_disp, echo = F, include=T}
+knitr::kable(tab7.11_combined[    c('year', 'rowCnt','tab7.11_totalCnt.rowCnt','rowPct')], 
+            col.names = c("Year","Frequency Unknown Race1 and Hispanic","Total Frequency","Percent Missing Race1 and Hispanic"), row.names=FALSE, 
+            format.args = list(big.mark = ","), align = 'c')
+```   
+  
+## Figure 1. Percent of Patients with Unknown Race1 and Hispanic Values by Year
+
+ 
+```{r tab7.11_fig, echo = F, include=T, dpi=500, fig.height=5, fig.width=8.5}
+
+ggplot(data = tab7.11_combined, aes(x = year, y = rowPct, group=1)) + geom_line() + geom_point() + ylab("Percent") + theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+```
+
+
+## Table 7.12. Unknown or Missing Race1 and Hispanic Ethnicity by Gender
+```{r tab7.12_disp, echo = F, include=T}
+knitr::kable(gender_re[    c('gender', 'decode','count','countPct')], 
+            col.names = c("Value","Label","Frequency","Percent"), row.names=FALSE, 
+            format.args = list(big.mark = ","))
+```
+
+
+## Table 7.13. Unknown or Missing Race1 and Hispanic Ethnicity by Age Group
+```{r tab7.13_disp, echo = F, include=T}
+knitr::kable(tab7.13_combined[    c('ageCat', 'count','tab7.13_total.count','columnPct', 'rowPct')], 
+            col.names = c("Age Group","Frequency Missing Race1 & Hispanic","Total Frequency","Column Percent", "Row Percent"), row.names=FALSE, 
+            format.args = list(big.mark = ","))
+```
+
+## Table 7.14 Telehealth by CPTMOD and POS with Encounter Type
+
+### Table 7.14a ENCTYPE in 'TE', 'EM', 'TV', or 'TO' and POS = '02'
+
+```{r echo = F}
+knitr::knit_print(tab7.14a)
+```
+
+### Table 7.14b CPTMOD1, CPTMOD2, or CPTMOD3 IN 'GT' or '95' and POS = '02'
+```{r echo = F}
+knitr::knit_print(tab7.14b)
+```
+
+### Table 7.14c CPTMOD1, CPTMOD2, or CPTMOD3 IN 'GT' or '95' and ENCTYPE in 'TE', 'EM', 'TV', or 'TO'
+
+```{r echo = F}
+knitr::knit_print(tab7.14c)
+
+```
+
+
+## Examination of the ENCOUNTERS Table
+
+Total rows in the dataset: **`r format(encRows, big.mark=",")`**\
+Total unique combinations of the primary key: **`r format(encPrimKeyRows, big.mark=",")`**\
+Total patients in the encounter table: **`r format(nEncPats, big.mark=",")`**\
+Month and year of first encounter: **`r format(as.Date(encSumm$firstEnc),"%B %Y")`**\
+Month and year of last encounter: **`r format(as.Date(encSumm$lastEnc),"%B %Y")`**\
+ **`r ifelse(encRows== encPrimKeyRows," ","*The encounter table has duplicate rows, by enc_id")`**
+
+
+## Table 8. Count of Distinct Patients by Age Group and Year of Utilization
+```{r tab8_disp, echo = F, include=T}
+knitr::kable(encPersonAgeYear_tx, 
+             col.names=c("Age at First Encounter in CY, N(%)",names(encPersonAgeYear_tx)[-1]), 
+             row.names=FALSE, align = "c",
+             format.args = list(big.mark = ","))
+```
+
+
+Percentages are calculated with all patients within the calendar year as the denominator
+
+## Figure 2. Count of Distinct Patients by Age Group and Year of Utilization
+```{r fig2, echo = F, include=T, dpi=500, fig.height=5, fig.width=8.5}
+ggplot(data = encPersonAgeYear, aes(x =aYear, y = Freq, fill = ageCat)) + 
+  geom_bar(stat = "identity") + labs(y='Count', x='Year', fill='Age at encounter')+theme(axis.text.x = element_text(angle = 45, hjust = 1)) + 
+  scale_y_continuous(labels = function(x) format(x, big.mark = ",", scientific = FALSE))
+```
+
+## Table 9. Annual Trends in the Total Number of Recorded Encounters, the Mean Number of Encounters, the Mean Number of Patients and the Percent Change from the Previous Year, by Calendar Year
+```{r tab9_dis, echo = F, include=T}
+kable(tab9_all, col.names = c("Year", "Total Number of Recorded Encounters", "Percent Change from Previous Year", "Total Number of Patients with at Least One Encounter", "Median Number of Encounters per Patient (Min, Max)"), format.args = list(big.mark = ","))
+```
+
+## Table 10. Count of Encounters by Encounter Type 
+```{r tab10_disp, echo = F, include=T}
+knitr::kable(encEncType, col.names=c("Encounter Type",'Number of Encounters','Percent of Total Encounters'), 
+             row.names=FALSE, 
+             format.args = list(big.mark = ","))
+```
+
+## Figure 3a. Ambulatory Encounters by Year and Month
+
+```{r fig3a, echo = F, include=T, echo = F, include=T, dpi=500, fig.height=5, fig.width=8.5}
+ggplot(subset(encTypeBymonYr,encType == 'AV'), aes(adate_YM, rowCnt)) + geom_line() +
+  scale_x_date(date_labels = "%b %y",date_breaks='1 year') + xlab("Month of encounter") + ylab("Frequency")+theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  geom_point(data=subset(fig3_timeTest, iqrTest==T & outcome=='AV') %>% rename(adate_YM=testMonth, rowCnt=Freq2), aes(adate_YM, rowCnt))
+```
+
+## Figure 3b. Other Encounter Types by Year and Month
+ 
+```{r fig3b, echo = F, include=T, echo = F, include=T, dpi=500, fig.height=5, fig.width=8.5}
+ggplot(subset(encTypeBymonYr,encType != 'AV'), aes(adate_YM, rowCnt, colour=decode)) + geom_line() +
+  scale_x_date(date_labels = "%b %y",date_breaks='1 year') + xlab("Month of encounter") + ylab("Frequency")+theme(axis.text.x = element_text(angle = 45, hjust = 1))+labs(color='Encounter type')+
+  geom_point(data=subset(fig3_timeTest, iqrTest==T & outcome !='AV') %>% rename(adate_YM=testMonth, rowCnt=Freq2), aes(adate_YM, rowCnt, colour=decode))
+#,legend.position="bottom" "
+```
+
+## Examination of the CENSUS_LOCATION Table
+
+Total rows in the dataset: **`r format(locSumm$rowCnt, big.mark=",")`**\
+Total unique combinations of the primary key: **`r format(locSumm$primKeyCnt, big.mark=",")`**\
+Total patients in the location table: **`r format(locSumm$personCnt, big.mark=",")`**\
+Month and year of first location: **`r format( as.Date(locSumm$firstDT),"%B %Y")`**\
+Month and year of last location: **`r format(as.Date(locSumm$lastDT),"%B %Y")`**\
+**`r ifelse(locSumm$rowCnt==locSumm$primKeyCnt," ","*The Census Location table has duplicate rows, by person_id and loc_start")`**\
+**`r format(multLastLocs$patsMultLoc, big.mark=",")`** patients have more than one most recent location record\
+
+
+## Table 11. Count of Unique Patients by Colorado County, Based on Most Recent Location
+```{r tab11_disp, echo = F, include=T}
+coloradoLoc <- subset(lastLocation, stCntyNm != "Invalid" & stCntyNm != "Missing" & substr(stCntyNm, 1, 2) == '08')
+
+nonColoradoLoc <- subset(lastLocation, stCntyNm == "Invalid")
+missingLoc <- subset(lastLocation, stCntyNm == "Missing")
+
+knitr::kable(coloradoLoc[c('stateCnty','stCntyNm','Freq','pct')], 
+             col.names=c('State/county code','State: county','Frequency','Percent'), 
+             row.names=FALSE, 
+             format.args = list(big.mark = ","))
+```
+
+Count of Non-Colorado Locations: **`r format(sum(nonColoradoLoc$Freq), big.mark=",")`**\
+Percentage of Non-Colorado Locations: **`r sum(nonColoradoLoc$pct)`**\
+Count of Locations Missing: **`r format(sum(missingLoc$Freq), big.mark=",")`**\
+Percentage of Locations Missing: **`r format(sum(missingLoc$pct), big.mark=",")`**\
+
+## Examination of the DIAGNOSES Table
+
+Total rows in the dataset: **`r format(diagSumm$rowCnt, big.mark=",")`**\
+Total unique combinations of the primary key: **`r format(diagSumm$primKeyCnt, big.mark=",")`**\
+Total patients in the table: **`r format(diagSumm$personCnt, big.mark=",")`**\
+Month and year of first diagnosis: **`r format( as.Date(diagSumm$firstDT),"%B %Y")`**\
+Month and year of last diagnosis: **`r format( as.Date(diagSumm$lastDT),"%B %Y")`**\
+**`r ifelse( diagSumm$rowCnt==diagSumm$primKeyCnt," ","*The table has duplicate rows, by enc_id dx adate diagprovider")`**\
+
+The following tables explore the contents of the DIAGNOSES table with a focus on trends over time and most common types of diagnoses.
+
+## Table 12. Annual Trends in the Total Number of Recorded Billing Diagnoses, the Mean Number of Encounters, the Mean Number of Patients and the Percent Change from the Previous Year, by Calendar Year
+
+This table examines the volume of diagnoses over time and the number of patients with encounters represented in the DIAGNOSES table. Average number of diagnoses per encounter, and per patient, are calculated to compare diagnosis volume trends over time.
+
+```{r tab12_dis, echo = F, include=T}
+kable(tab12_add, col.names = c("Year", "Total Number of Recorded Diagnoses", "Percent Change from Previous Year", "Total Number of Encounters with 1+ Diagnosis", "Total Number of Unique Patients with 1+ Diagnosis", "Median Number of Diagnoses per Encounter (Min, Max)", "Median Number of Diagnoses per Patient (Min, Max)"), format.args = list(big.mark = ","))
+```
+
+## Table 13. Summary  of the Ten Most Common Billing Diagnosis Codes, by All or Ambulatory Encounter Type ( `r paste0(tab_2_Last_Recent_Years[[1]], " & ", tab_2_Last_Recent_Years[[2]])`)
+
+These tables include information on the ten most common diagnoses recorded in your DIAGNOSES table. Data on diagnosis codes, types, counts and patients are presented for all encounters and for ambulatory only encounters (ENCTYPE=AV).
+
+```{r tab13a_disp, echo = F, include=T}
+kable(tab13_dxall, col.names = c("Diagnosis Code", "Code Type", "Diagnosis Description", "Number of Recorded Diagnoses", "Number of Patients"), format.args = list(big.mark = ","))
+
+```
+\newline
+```{r tab13b_disp, echo = F, include=T}
+kable(tab13_dxav, col.names = c("Diagnosis Code for AV", "Diagnosis Type for AV", "Diagnosis Description", "Number of Recorded Diagnosis for AV", "Number of Patients for AV"), format.args = list(big.mark = ","))
+```
+
+## Table 14. Summary of the Ten Most Common Billing Diagnoses by Diagnosis Code Type, Total Number of Recorded Diagnoses and Total Number of Recorded Patients
+This table includes information on the ten most common diagnoses recorded in your DIAGNOSES table. Data on diagnosis codes, counts and patients are presented for ICD-9 and ICD-10.
+
+```{r tab14_disp, echo = F, include=T}
+#if and else statements are used to determine if the respective table has any
+#rows. If not, then an error message is written indicating so.
+if (nrow(tab14_09) != 0){
+  tab14_09 <-  
+    mutate(.data=tab14_09,
+      dxCode  = paste(dx_codetype,'-',gsub('.','',dx, fixed=T), sep='')
+      )
+  tab14_09 <- left_join(x = tab14_09, y=icdLU, by = "dxCode")
+  tab14_09 <-select(.data = tab14_09, dx, Description, nrows_all, npats)
+  kable(tab14_09, col.names = c("Diagnosis","Diagnosis Description", "Records", "Patients"), caption = "Diagnosis Code Type = 09", format.args = list(big.mark = ","))
+} else {
+  knitr::knit_print("Table had zero rows.  DX_CODETYPE = '09' likely isn't a category for this variable.")
+} 
+if (nrow(tab14_10) != 0){
+  tab14_10 <- 
+    mutate(.data = tab14_10,
+      dxCode  = paste(dx_codetype,'-',gsub('.','',dx, fixed=T), sep='')
+      )
+  tab14_10 <- left_join(x=tab14_10, y=icdLU, by = "dxCode")
+  tab14_10 <- select(.data = tab14_10, dx, Description, nrows_all, npats)
+  kable(tab14_10, col.names = c("Diagnosis", "Diagnosis Description", "Records", "Patients"), caption = "Diagnosis Code Type = 10", format.args = list(big.mark = ","))
+} else {
+   knitr::knit_print("Table had zero rows.  DX_CODETYPE = '10' likely isn't a category for this variable.")
+} 
+```
+
+## Figure 4a. Count of Billing Diagnoses by Year and Month in Ambulatory Encounters 
+
+```{r Count of diagnoses by year and month in ambulatory encounters, echo = F, include=T, dpi=500, fig.height=5, fig.width=8.5}
+ggplot(subset(dxByMonEncTp,encType == 'AV'), aes(monYr, Freq)) + geom_line(size=.75) +
+  scale_x_date(date_labels = "%b %y",date_breaks='1 year') + xlab("Month of encounter") + ylab("Frequency")+theme(axis.text.x = element_text(angle = 45, hjust = 1)) +  scale_color_brewer(palette ="Paired") +
+  geom_point(data=subset(fig4_timeTest, iqrTest==T & outcome=='AV') %>% rename(monYr=testMonth, rowCnt=Freq2), aes(monYr, rowCnt))
+```
+
+## Figure 4b. Count of Billing Diagnoses by Year and Month, other Encounter Types
+
+```{r Count of diagnoses by year and month other encounter types, echo = F, include=T, dpi=500, fig.height=5, fig.width=8.5}
+ggplot(subset(dxByMonEncTp,encType != 'AV'), aes(monYr, Freq, colour=decode)) + geom_line(size=.75) +
+  scale_x_date(date_labels = "%b %y",date_breaks='1 year') + xlab("Month of encounter") + ylab("Frequency")+theme(axis.text.x = element_text(angle = 45, hjust = 1),legend.position="bottom")+labs(color='Encounter type') + scale_color_brewer(palette ="Paired") +
+  geom_point(data=subset(fig4_timeTest, iqrTest==T & outcome !='AV') %>% rename(monYr=testMonth, rowCnt=Freq2), aes(monYr, rowCnt, colour=decode))
+
+```
+
+## Examination of the VITAL_SIGNS Table
+
+Total rows in the dataset: **`r format(vitalSumm$rowCnt, big.mark=",")`**\
+Total unique combinations of the primary key: **`r format(vitalSumm$primKeyCnt, big.mark=",")`**\
+Total patients in the table: **`r format(vitalSumm$personCnt, big.mark=",")`**\
+Month and year of first record: **`r format(as.Date(vitalSumm$firstDT),"%B %Y")`**\
+Month and year of last record: **`r format(as.Date(vitalSumm$lastDT),"%B %Y")`**\
+**`r ifelse(vitalSumm$rowCnt==vitalSumm$primKeyCnt," ","*The table has duplicate rows, by person_id, measure_date, measure_time")`**\
+
+
+## Table 15. Vital Signs Summary
+
+```{r echo = F}
+knitr::kable(vlst[c('variable','nobs','npats','minimum','q1','median','q3', 'maximum')], 
+             col.names=c('Vital record','Greater Than 0 Obs','Unique patients with Greater Than 0 Obs','Minimum','Q1','Median','Q3', 'Maximum'), 
+             row.names=FALSE, 
+             format.args = list(big.mark = ","))
+
+```
+
+## Table 16. Annual Trends in the Total Number of Recorded Vital Sign Records, the Mean Number of Encounters, the Mean Number of Patients and the Percent Change from the Previous Year, by Calendar Year
+
+This table examines the volume of vital signs over time and the number of patients with encounters represented in the VITAL_SIGNS table. Average number of vital signs per encounter, and per patient, are calculated to compare vital signs volume trends over time; and also to indicate whether or not vital signs are captured in one row or multiple rows for each encounter.
+
+```{r tab15_dis, echo = F, include=T}
+kable(tab16_add, col.names = c("Year", "Total Number of Recorded Vitals", "Percent Change from Previous Year", "Total Number of Encounters with Vital_Signs", "Total Number of Patients with Vitals", "Median Number of Vitals per Encounter (Min, Max)", "Median Number of Vitals per Patient (Min, Max)"), format.args = list(big.mark = ","))
+```
+
+\newpage
+
+## Figure 5. Count of Vital Signs by Year and Month
+
+```{r echo = F}
+ggplot(subset(vitalsByMonYrTx, Vital_record=="height"), 
+    aes(monYr, Count, colour=Vital_record)) + 
+      geom_line() +
+      ggtitle("Height") +
+      scale_x_date(date_labels = "%b %y",date_breaks='1 year') +
+      xlab("Month of encounter") +
+      ylab("Frequency") +
+      theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+      labs(color='Vital type') +
+      theme(legend.position='none') +
+  geom_point(data=subset(fig5_timeTest, iqrTest==T & outcome=="height" ) %>% rename(monYr=testMonth, Count=Freq2, Vital_record = outcome), aes(monYr, Count, colour=Vital_record))
+
+ggplot(subset(vitalsByMonYrTx, Vital_record=="weight"), 
+    aes(monYr, Count, colour=Vital_record)) + 
+      geom_line() + 
+      ggtitle("Weight") + 
+      scale_x_date(date_labels = "%b %y",date_breaks='1 year') + 
+      xlab("Month of encounter") + 
+      ylab("Frequency")+theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+      labs(color='Vital type') +
+      theme(legend.position='none') +
+  geom_point(data=subset(fig5_timeTest, iqrTest==T & outcome=="weight" ) %>% rename(monYr=testMonth, Count=Freq2, Vital_record = outcome), aes(monYr, Count, colour=Vital_record))
+
+ggplot(subset(vitalsByMonYrTx, Vital_record=="systolic"), 
+    aes(monYr, Count, colour=Vital_record)) +
+      geom_line() +
+      ggtitle("Systolic") +
+      scale_x_date(date_labels = "%b %y",date_breaks='1 year') +
+      xlab("Month of encounter") +
+      ylab("Frequency")+theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+      labs(color='Vital type') +
+      theme(legend.position='none') +
+  geom_point(data=subset(fig5_timeTest, iqrTest==T & outcome=="systolic" ) %>% rename(monYr=testMonth, Count=Freq2, Vital_record = outcome), aes(monYr, Count, colour=Vital_record))
+
+ggplot(subset(vitalsByMonYrTx, Vital_record=="diastolic"), 
+    aes(monYr, Count, colour=Vital_record)) +
+      geom_line() +
+      ggtitle("Diastolic") +
+      scale_x_date(date_labels = "%b %y",date_breaks='1 year') +
+      xlab("Month of encounter") +
+      ylab("Frequency") +
+      theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+      labs(color='Vital type') +
+      theme(legend.position='none') +
+  geom_point(data=subset(fig5_timeTest, iqrTest==T & outcome=="diastolic" ) %>% rename(monYr=testMonth, Count=Freq2, Vital_record = outcome), aes(monYr, Count, colour=Vital_record))
+
+```
+
+
+## Table 17. BENEFIT Table Information
+
+## Table 17 Benefit Summary
+
+```{r echo = F}
+knitr::knit_print(tab17)
+```
+
+## Table 17.1: Benefit Category (Row) by Benefit Type (Column)
+
+```{r echo = F}
+kable(tab17_1)
+```
+
+## Table 17.2: Benefit Records per Person by Year for the Past 5 Years (`r paste0(tabBenefit_years[[1]], " - ", tabBenefit_years[[5]])`)
+```{r echo = F}
+kable(tab17_2)
+
+```
+
+## Table 17.3: Benefit Records per Encounter by Year for Past 5 Years (`r paste0(tabBenefit_years[[1]], " - ", tabBenefit_years[[5]])`)
+
+```{r echo = F}
+kable(tab17_3)
+```
+
+## Table 17.4: Benefit Categories per Person by Year for the Past 5 Years(`r paste0(tabBenefit_years[[1]], " - ", tabBenefit_years[[5]])`)
+
+```{r echo = F}
+kable(tab17_4)
+
+```
+
+## Table 18. LINKAGE Table Information
+
+```{r echo=F}
 knitr::kable(tab18, col.names = c("Number of unique patient IDs", "Number of unique linkage IDs"), format.args = list(big.mark = ","))
+
 ```
 
 
