@@ -54,7 +54,7 @@ library(officer)
 knitr::opts_chunk$set(echo = TRUE,
                 message = FALSE,
                 warning = FALSE,
-                error = F,
+                error = TRUE,
                 time_it = TRUE,
                 capture_error = TRUE)
 
