@@ -4,7 +4,7 @@ The `chordsTables` package is designed to provide an interface for providers to 
 
 ## Prerequisite Software
 
-1) R version 4.0.4: https://cran.r-project.org/bin/windows/base/old/4.0.4/
+1) R version 3.6.1 or version 4.x: https://cran.r-project.org/bin/windows/base/old/
 2) Pandoc: https://pandoc.org/installing.html
 
 Use of this package assumes you have have downloaded and installed R and RStudio.  Installing the `chordsTables` package downloads all other dependent packages and contains all files necessary for generating reports.
@@ -60,4 +60,4 @@ After you have clicked "Save," RStudio will generate the requested report. You c
 If `batchmode = TRUE`, the report will automatically output to `C:/Users/<username>/Documents` or to the directory specified in the `outputdir` parameter.
 
 ## Troubleshooting
-If the reports will not run, check to make sure you have the appropriate version of R (and RStudio of you are using it). You can also try reinstalling the `devtools` package again and re-running all of the R code listed in the steps below. If you continue to have issues, please contact Rachel Zucker at Rachel.Zucker@CUANSCHUTZ.EDU.
+If the reports will not run, check to make sure you have the appropriate version of R (and RStudio of you are using it). You can also try reinstalling the `devtools` package again and re-running all of the R code listed in the steps below. If you continue to have issues, please contact CHORDS Support at CHORDS.Support@ucdenver.edu.
