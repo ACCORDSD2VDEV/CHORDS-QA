@@ -61,3 +61,15 @@ If `batchmode = TRUE`, the report will automatically output to `C:/Users/<userna
 
 ## Troubleshooting
 If the reports will not run, check to make sure you have the appropriate version of R (and RStudio of you are using it). You can also try reinstalling the `devtools` package again and re-running all of the R code listed in the steps below. If you continue to have issues, please contact CHORDS Support at CHORDS.Support@ucdenver.edu.
+
+## Updating renv prerequisites (Developers only)
+
+ 1) Open RStudio
+ 2) Make sure renv is installed
+ 3) The `.RProfile` file in the project should direct renv to activate the appropriate profile based on the R version.  The profile can be automatically activated by using renv::activate(profile = "R[the major version of R]"). Example for R version 4: `renv::activate(profile = "R4")`.  Note that the .RProfile file is only activated with RStudio.  If you need to make alterations to this .RProfile file, be sure they are mirrored in the QA script in the portal.  
+ 4) After a profile is active you can execute `renv::hydrate()` to catch any dependencies that are being used
+ 5) `renv::update(packages = c("comma separated list of specific packages to update"))` can be used to update a specific package or `renv::update()` to update all packages.
+ 6) Run `renv::snapshot()` to capture any changes.
+ 7) There are some disparities between version of R at the different partners.  renv should be run and updated for the major versions of R that are in use by the partners. A developer for this project should have those versions of R installed in their environment.  If dependencies are updated in one version of R, the other version(s) should also be updated. RStudio can be directed to different versions of R by click on Tools -> Global Options -> Select Change next to the version of R currently in use.  When the version is changed, close and reopen RStudio then follow the above steps to update the dependencies.
+ 8) If specific versions of packages are required, they can be installed with `renv::install("package_name_to_intall@package_version`.  Example: `renv::install("Rcpp@1.0.7")`.
+ 9) More information about using renv can be found at https://rstudio.github.io/renv/articles/renv.html

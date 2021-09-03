@@ -142,6 +142,16 @@ get_connection <- function(){
 tbresult <- runTableReplacements(connectionString)
 ```
 
+
+```{r validation messages, echo = F,  include = T}
+# set up empty container for alert messages
+QA_Alert_Messages <- data.frame(#'Alert Code'=character(),
+                 'Alert Message'=character(), stringsAsFactors = FALSE)
+
+# populate as:  QA_Alert_Messages[nrow(QA_Alert_Messages) + 1,] = c(missingTableMessage)
+
+```
+
 ## CHORDS QA Report: VDW P2 Tables
 
 The purpose of the data quality program is to characterize the data in a second set of CHORDS VDW tables (previously referred to as Priority 2 or "P2" tables).  The P2 tables include the following: LAB_RESULTS, PRESCRIBING, PROCEDURES, PROVIDER_SPECIALTY, SOCIAL_HISTORY, PRO_SURVEYS, and PRO_QUESTIONS. The program uses a series of SQL queries operationalized using RStudio to produce this report.  These tables provide descriptive information about data stored in a data partner's VDW and can be used to assess data model conformance, data plausibility, and data completeness.
@@ -153,11 +163,7 @@ Data Partner:
 Analyst: 
 Query Run Date:  `r Sys.Date()`
 
-## Data Quality Report Results
-## Table 1. Records, Patients, Encounters, and Date Ranges by Table
-
-This table contains summary counts and date ranges by table. Distinct encounters and patients are shown for applicable tables. Date ranges should be used to compare data time windows between tables.
-
+ 
 ```{r tab1_sum_stats, echo = F, include=T}
 tab1_lab <- run_query(paste0("select count(*) as nrows, 
   count(distinct person_id) as npats,
@@ -199,16 +205,9 @@ tab1_all <- bind_rows(tab1_lab, tab1_rx, tab1_px, tab1_sh, tab1_proresp) %>%
 
 ```
 
-```{r tab1_disp, echo = F, include=T}
-kable(tab1_all, col.names = c("Table", "Records", "Patients", "Encounters", "Date Field", "Min Date", "Max Date"), format.args = list(big.mark = ",")) 
-  
-```
 
 
 
-## Table 2: Missingness Variables across P2 Tables
-
-This table contains record counts for null and unknown values across P2 tables.
 
 
 ```{r tab2_res, echo = F, include=T}
@@ -332,21 +331,48 @@ tab2_uk <- bind_rows(tab2_lab_uk2, tab2_rx_uk2, tab2_px_uk2, tab2_ps_uk2, tab2_s
                                              ifelse(table == "SOCIAL_HISTORY", (records_uk / tab1_sh$nrows * 100), NA)))))
   )
 tab2_all <- left_join(tab2_null, tab2_uk, by = c("table", "var"))
+
+# table 2 alerts
+missTabTwo <- function(tabName='NULL', varName='NULL', crit=0.1) { 
+  
+  pmiss <-subset(tab2_all, table == tabName & var == varName)$pct_rec_uk
+  
+  if(pmiss>crit & !is.na(pmiss)) {
+    QA_Alert_Messages[nrow(QA_Alert_Messages) + 1,] = 
+      paste0('The ',tabName,' table has ',round(pmiss,1),'% rows missing ',varName)
+    QA_Alert_Messages <<- QA_Alert_Messages
+  }
+  
+}
+
+missTabTwo(tabName='LAB_RESULTS', varName='BATTERY_CD', crit=1)
+missTabTwo(tabName='LAB_RESULTS', varName='LOCAL_CD', crit=1)
+missTabTwo(tabName='LAB_RESULTS', varName='RESULT_NUM', crit=10)
+missTabTwo(tabName='LAB_RESULTS', varName='RESULT_UNIT', crit=10)
+
+missTabTwo(tabName='PRESCRIBING', varName='ENC_ID', crit=10)
+missTabTwo(tabName='PRESCRIBING', varName='GENERIC_MED_NAME', crit=10)
+missTabTwo(tabName='PRESCRIBING', varName='RX_DAYS_SUPPLY', crit=10)
+missTabTwo(tabName='PRESCRIBING', varName='RX_END_DATE', crit=10)
+missTabTwo(tabName='PRESCRIBING', varName='RX_START_DATE', crit=10)
+missTabTwo(tabName='PRESCRIBING', varName='RXNORM', crit=10)
+
+missTabTwo(tabName='PROVIDER_SPECIALTY', varName='SPECIALTY', crit=10)
+missTabTwo(tabName='PROVIDER_SPECIALTY', varName='PROVIDER_TYPE', crit=10)
+
+missTabTwo(tabName='SOCIAL_HISTORY', varName='TOBACCO_USER', crit=10)
+missTabTwo(tabName='SOCIAL_HISTORY', varName='ENC_ID', crit=10)
+
+missTabTwo(tabName='PRO_RESPONSES', varName='PRO_ID', crit=1)
+missTabTwo(tabName='PRO_RESPONSES', varName='QUESTION_ID', crit=1)
+missTabTwo(tabName='PRO_RESPONSES', varName='PERSON_ID', crit=1)
+missTabTwo(tabName='PRO_RESPONSES', varName='RESPONSE_DATE', crit=1)
+
+missTabTwo(tabName='PRO_RESPONSES', varName='ENC_ID', crit=10)
+
 ```
 
-```{r tab2_disp, echo = F, include=T}
-kable(tab2_all, col.names = c("Table", "Variable", "Null Records", "Percent of Records Null", "Unknown Records", "Percent of Records Unknown"), digits = 2, format.args = list(big.mark = ","))
-```
-
-## Examination of the LAB_RESULTS Table 
-
-The following tables explore the contents of the LAB_RESULTS table with a focus on trends over time,CHORDS priority lab results, and most common types of lab tests. 
-
-
-## Table 3: Annual Trends in the Total Number of Recorded Lab Tests, the Number of Patients Tested and the Percent Change from the Previous Year, by Calendar Year
-
-This table displays trends in the number of recorded lab tests and the number of unique patients tested by year. The percent change in both count values is included to identify unexpected temporal fluctuations. 
-
+ 
 ```{r tab3_res, echo = F, include=T}
 tab3 <- run_query( 
   paste0("select year(result_dt) as year,
@@ -363,15 +389,6 @@ tab3 <- tab3 %>%
 tab3$year <- as.character(tab3$year)
 tab3_ord <- tab3[, c(1,2,4,3,5)]
 ```
-
-```{r tab3_disp, echo = F, include=T}
-kable(tab3_ord, col.names = c("Year", "Number of Recorded Lab Tests", "Percent Change From Previous Year", "Number of Patients Tested", "Percent Change From Previous Year"), format.args = list(big.mark = ","), align = 'c')
-```
-
-
-## Table 4: CHORDS Priority Lab Tests - Number/Percentage of Tests, Number/Percentage of Patients Tested, Mean Result Values and Result Ranges, by Select TEST_TYPE Values 
-
-This table illustrates the number (and percent) of priority lab test records including the percent of all lab test records , as well as the number (and percent)  of unique patients tested for select TEST_TYPE values. 
 
 ```{r tab4_res, echo = F, include=T}
 tab4 <- run_query( 
@@ -399,15 +416,8 @@ tab4 <- tab4 %>%
 tab4 <- format(tab4, digits = 2, scientific = FALSE)
 ```
 
-```{r tab4_disp, echo = F, include=T}
 
-kable(tab4 [c("test_type", "nrows", "pct_rec", "npats", "pct_pat", "avg_resval", "min_resval", "max_resval")], col.names = c("Test Type", "Number of Recorded Lab Tests", "Percentage of All Recorded Tests", "Number of Unique Patients Tested", "Percentage of All Patients", "Mean Result Value", "Minimum Result Value", "Maximum Result Value"), digits = 2, align = 'c', format.args = list(big.mark = ",")) 
-```
-
-## Figures 1a-1i: Temporal Trends in the Number of CHORDS Priority Lab Tests, by Select TEST_TYPE Values
-
-These figures shows temporal trends in the number of records for CHORDS priority lab tests.
-```{r fig1_res, fig.height=3.22, fig.width=7, echo = F, include=T, dpi=500}
+```{r fig1_res pre, fig.height=3.22, fig.width=7, echo = F, include=T, dpi=500}
 fig1 <- run_query(
   paste0("select test_type, 
     month(result_dt) as month,
@@ -446,14 +456,10 @@ fig1Figures <-lapply(2:ncol(fig1_wide), function(x) {
         plot.title = element_text(hjust = 0.3, size = 16))
    })
 
-suppressWarnings(invisible(lapply(fig1Figures, print)))
-
+ 
 ```
 
-## Table 5: Summary of the Ten Most Common Lab Tests - Number/Percentage of Tests and Number/Percentage of Patients Tested, by Select BATTERY_CD Values
-
-This table illustrates the number (and percent) of the data partner's ten most common lab tests and the number (and percent) of unique patients tested with the ten most common lab tests, by the BATTERY_CD field (which captures site-specific lab test names), the percentage of records this represents, and the number and percent of patients in the LAB_RESULTS table who have these results. 
-
+ 
 ```{r tab5_res, echo = F, include=T}
 tab5 <- run_query(
                          paste0("select battery_cd,
@@ -471,19 +477,7 @@ tab5_sub <- tab5 %>%
   select(battery_cd, nrows, pct_rec, npats, pct_pat)
 ```
 
-
-```{r tab5_disp, echo = F, include=T}
-kable(tab5_sub, col.names = c("BATTERY_CD", "Number of Recorded Lab Tests", "Percentage of All Lab Tests", "Number of Patients Tested", "Percentage of All Patients with a Lab Test"), format.args = list(big.mark = ","))
-```
-
-## Examination of the PRESCRIBING Table (Medication Orders and Prescriptions Combined)
-
-The following tables explore the contents of the PRESCRIBING table with a focus on trends over time and most common types of medications ordered. 
-
-## Table 6: Annual Trends in Prescribing Data - the Total Number of Recorded Medication Orders, the Percent Change from the Previous Year, the Total Number of Patients and the Mean, Maximum and Minimum Numbers of Orders & Prescriptions per Patient
-
-This table displays trends in PRESCRIBING record volume over time as well as patient volume represented in the table. PRESCRIBING records are attributed to a year based on RX_ORDER_DATE.
-
+ 
 
 ```{r tab6_res, echo = F, include=T}
 tab6 <- run_query(
@@ -513,14 +507,7 @@ tab6_all <- left_join(tab6, tab6_avg_pats, by = "year") %>%
 tab6_all$year <- as.character(tab6_all$year)
 ```
 
-```{r tab6_disp, echo = F, include=T}
-kable(tab6_all, col.names = c("Year", "Total Number of Prescriptions", "Percent Change From Last Year", "Total Number of Patients", "Median number of Prescriptions per patient", "Minimum Number of Prescriptions Per Patient", "Maximum Number of Prescriptions Per Patient"), align = "c" , format.args = list(big.mark = ","))
-```
-
-## Table 7: Summary of the Ten Most Common Medications by Order Type
-
-This table displays the top ten most common orders including count of records and patients. 
-
+ 
 ```{r tab7_res, echo = F, include=T}
 tab7<- run_query( 
                         paste0("select top 10 GENERIC_MED_NAME,
@@ -535,18 +522,7 @@ tab7<- run_query(
 
 ```
 
-```{r tab7_disp, echo = F, include=T}
-kable(tab7, col.names = c("Medication Name (GENERIC_MED_NAME)", "Records", "Patients", "Average Days Supply", "Average Quantity"), format.args = list(big.mark = ","))
-```
-
-## Examination of the PROCEDURES Table 
-
-The following tables explore the contents of the PROCEDURES table with a focus on trends over time and most common types of procedures. 
-
-## Table 8: Annual Trends in the Total Number of Recorded Procedures, the Mean Number of Encounters, the Mean Number of Patients and the Percent Change from the Previous Year, by Calendar Year
-
-This table examines the volume of procedures over time and the number of encounters and patients with represented in the PROCEDURES table. Average number of procedures per encounter, and per patient, are calculated to compare procedure volume trends over time.
-
+ 
 
 ```{r tab8_res, echo = F, include=T}
 tab8 <- run_query( 
@@ -592,13 +568,7 @@ tab8_add <- tab8 %>%
 tab8_add$year <- as.character(tab8_add$year)
 ```
 
-```{r tab8_dis, echo = F, include=T}
-kable(tab8_add, col.names = c("Year", "Total Number of Recorded Procedures", "Percent Change from Previous Year", "Total Number of Encounters with Procedures", "Total Number of Patients with Procedures", "Median Number of Procedures per Encounter (Min, Max)", "Median Number of Procedures per Patient (Min, Max)"),  align= "c", format.args = list(big.mark = ","))
-```
 
-## Table 9:  Total Number and Percent of Recorded Encounters, Diagnoses and Procedures, by Encounter Type
-
-This table compares the distribution of procedures, diagnoses and encounters by encounter type. Average diagnosis and procedure counts per encounter are calculated to compare diagnosis and procedure volume by encounter type.
 
 ```{r tab9_res, echo = F, include=T}
 tab9_enct1 <- run_query(
@@ -638,14 +608,8 @@ tab9_all <- tab9_enct1 %>%
   bind_rows(., tab9_tot)  
 ```
 
-```{r tab9_disp, echo = F, include=T}
-kable(tab9_all[1:7, c( "enctype", "nrows_enct", "pct_enct", "nrows_enct", "pct_diag", "nrows_px", "pct_px")], col.names = c("Encounter Type", "Number of Encounters", "Percent of Total Encounters", "Number of Diagnoses", "Percent of Total Diagnoses", "Number of Procedures", "Percent of Total Procedures"), digits = 2, format.args = list(big.mark = ","))
-```
-
-\pagebreak
-
-## Fig 9a: Summary of Encounters Types
-
+ 
+ 
 ```{r fig9a_data, echo = F, include=T}
 fig9a <- run_query(
     paste0("
@@ -725,7 +689,7 @@ ORDER BY b.DATE
 "))
 ```
 
-```{r fig9a_dist, fig.height=3.25, fig.width=7, echo = F, include=T, dpi=500}
+```{r fig9a_dist pre, fig.height=3.25, fig.width=7, echo = F, include=T, dpi=500}
 
 fig9a_sub <- fig9a %>% 
   arrange(Year, Month, EncTypeName) %>% 
@@ -757,15 +721,11 @@ fig9aFigures <-lapply(2:ncol(fig9a_wide), function(x) {
         plot.title = element_text(hjust = 0.3, size = 16))
    })
 
-suppressWarnings(invisible(lapply(fig9aFigures, print)))
 
 ```
 
-\pagebreak
-
-## Fig 9b: Summary of Diagnosis Encounter Types
-
-```{r fig9b_data, echo = F, include=T}
+ 
+```{r fig9b_data pre, echo = F, include=T}
 fig9b <- run_query(
     paste0("
 SET NOCOUNT ON;
@@ -845,7 +805,7 @@ ORDER BY b.DATE
 ```
 
 
-```{r fig9b_dist, fig.height=3.25, fig.width=7, echo = F, include=T, dpi=500}
+```{r fig9b_dist pre, fig.height=3.25, fig.width=7, echo = F, include=T, dpi=500}
 
 fig9b_sub <- fig9b %>% 
   arrange(Year, Month, DiagnosisEncTypeName) %>% 
@@ -875,16 +835,10 @@ fig9bFigures <-lapply(2:ncol(fig9b_wide), function(x) {
         plot.title = element_text(hjust = 0.3, size = 16))
    })
 
-suppressWarnings(invisible(lapply(fig9bFigures, print)))
-
+ 
 ```
 
-\pagebreak
-
-## Table 10: Summary of the Ten Most Common Procedures - Procedure Code, Procedure Type, Total Number of Recorded Procedures and Total Number of Recorded Patients, by All or Ambulatory Encounter Type 
-
-This table includes information on the ten most common procedures recorded in your PROCEDURE table.  Data on procedure codes, types, counts and patients are presented for all encounters and for ambulatory only encounters (ENCTYPE='AV'). 
-
+ 
 ```{r tab10_res, echo = F, include=T}
 tab10_pxall <- run_query(
     paste0("select px,
@@ -908,14 +862,7 @@ tab10_pxav <- run_query(
 tab10_all <- bind_cols(tab10_pxall, tab10_pxav)
 ```
 
-```{r tab10_disp, echo = F, include=T}
-kable(tab10_all, col.names = c("Procedure Code", "Procedure Type", "Number of Recorded Procedures", "Number of Patients", "Procedure Code for AV", "Procedure Type for AV", "Number of Recorded Procedures for AV", "Number of Patients for AV"), align = 'c', format.args = list(big.mark = ","))
-```
-
-## Table 11: Summary of the Ten Most Common Procedures by Procedure Code Type, Total Number of Recorded Procedures and Total Number of Recorded Patients 
-
-This table includes information on the ten most common procedures recorded in your PROCEDURE table.  Data on procedure codes, counts and patients are presented for CPT, HCPCS, and other code types. 
-
+ 
 ```{r tab11_res, echo = F, include=T}
 tab11_pxc4 <- run_query(
     paste0("select top 10 px,
@@ -943,34 +890,6 @@ tab11_px_oth <- run_query(
       order by nrows_all DESC"))
 ```
 
-```{r tab11_disp, echo = F, include=T}
-#if and else statements are used to determine if the respective table has any
-#rows. If not, then an error message is written indicating so.
-if (nrow(tab11_pxc4) != 0){
-  kable(tab11_pxc4, col.names = c("Procedure", "Records", "Patients"), caption = "Procedure Code Type = C4", format.args = list(big.mark = ","))
-} else {
-  cat(noquote("Table had zero rows.  PX_CODETYPE = C4 likely isn't a category for this variable.\n"))
-} 
-if (nrow(tab11_pxh4) != 0){
-  kable(tab11_pxh4, col.names = c("Procedure", "Records", "Patients"), caption = "Procedure Code Type = H4", format.args = list(big.mark = ","))
-} else {
-  cat(noquote("Table had zero rows.  PX_CODETYPE = H4 likely isn't a category for this variable.\n"))
-} 
-if (nrow(tab11_px_oth) != 0){
-  kable(tab11_px_oth, col.names = c("Procedure", "Records", "Patients"), caption = "Procedure Code Type = 09, 10, 11, RV, LO, OT", format.args = list(big.mark = ","))
-} else {
-  cat(noquote("Table had zero rows.  PX_CODETYPE = 09, 10, 11, RV, LO, or OT likely aren't categories for this variable.\n"))
-} 
-```
-
-
-## Examination of the PROVIDER_SPECIALTY Table
-
-The following tables explore the contents of the PROVIDER_SPECIALTY table with a focus on demographic data and representativeness of providers across tables.  Note that in some systems providers can be listed multiple times with multiple provider types/specialties. 
-
-## Table 12: Number and Percent of Providers represented in ENCOUNTERS, DIAGNOSIS, LAB_RESULTS, PRESCRIBING, AND PROCEDURES Tables 
-
-This table includes information on the number and percent of providers represented in various CHORDS VDW tables.
 
 ```{r tab12_res, echo = F, include=T}
 tab12_ps <- run_query(
@@ -1003,14 +922,6 @@ tab12_all <- bind_rows(tab12_ps, tab12_dx, tab12_enct, tab12_lab, tab12_rx, tab1
   )
 ```
 
-```{r tab12_disp, echo = F, include=T}
-kable(tab12_all, col.names = c("Table", "Number of Providers*", "Percent of All Providers"), digits = 2, format.args = list(big.mark = ","))
-```
-*Excludes Provider = 'Unknown'
-
-## Table 13: Number and Percent of Providers by Specialty
-
-This table includes information on the distribution of providers by specialty.
 
 ```{r tab13_res, echo = F, include=T}
 tab13 <- run_query(
@@ -1027,13 +938,6 @@ tab13$spec_full <- specialties$Description[match(as.character(tab13$spec), as.ch
 tab13 <- tab13[, c(1,4,2,3)]
 ```
 
-```{r tab13_disp, echo = F, include=T}
-kable(tab13, col.names = c("Specialty Abbreviation", "Specialty", "Number of Providers", "Percent of All Providers"), digits = 2, format.args = list(big.mark = ","))
-```
-
-## Table 14: Number and Percent of Provider by Provider Type 
-
-This table includes information on the distribution of providers by type.
 
 ```{r tab14_res, echo = F, include=T}
 tab12_ps <- run_query(
@@ -1067,13 +971,7 @@ tab14 <- tab14[, c(1,4,2,3)]
 tab14 <- tab14[order(-tab14[, 4]), ]
 ```
 
-```{r tab14_disp, echo = F, include=T}
-kable(tab14, col.names = c("Provider Type Code", "Provider Type Description", "Number of Providers", "Percent of All Providers"), digits = 2, align = 'l', row.names = F, format.args = list(big.mark = ","))
-```
 
-## Table 15: Annual Trends in Self-Reported Tobacco Use
-
-This table includes information on the distribution of SOCIAL_HISTORY records by TOBACCO_USER value.
 
 ```{r tab15_res, echo = F, include=T}
 tab15 <- run_query(
@@ -1103,13 +1001,6 @@ tab15$year <- as.character(tab15$year)
 
 ```
 
-```{r tab15_disp, echo = F, include=T}
-kable(tab15, col.names = c("Year", "Records", "Yes/Current (%)", "Infrequent(%) ", "Quit/Former (%)", "Passive/Second Hand Smoke Exposure (%)", "Never (%)", "Not Asked/Unknown (%)", "Null or Uncategorized"), align = 'c', format.args = list(big.mark = ","))
-```
-
-## Table 16: Annual Trends in Self-Reported Alcohol Use
-
-This table includes information on the distribution of SOCIAL_HISTORY records by ALCOHOL_USER value.
 
 ```{r tab16_res, echo = F, include=T}
 tab16 <- run_query(
@@ -1131,13 +1022,6 @@ tab16$unknown <- paste0(format(tab16$unknown, big.mark = ","), " (", round(100* 
 tab16$year <- as.character(tab16$year)
 ```
 
-```{r tab16_disp, echo = F, include=T}
-kable(tab16, col.names = c("Year", "Records", "Yes/Current", "Quit/Former",  "Never", "Not Asked/Unknown", "Null or Uncategorized"), align = 'c', format.args = list(big.mark = ","))
-```
-
-## Table 17: Annual Trends in Self-Reported Illicit Drug Use
-
-This table includes information on the distribution of SOCIAL_HISTORY records by ILL_DRUG_USER value.
 
 ```{r tab17_res, echo = F, include=T}
 tab17 <- run_query(
@@ -1158,13 +1042,6 @@ tab17$unknown <- paste0(format(tab17$unknown, big.mark = ","), " (", round(100* 
 tab17$year <- as.character(tab17$year)
 ```
 
-```{r tab17_disp, echo = F, include=T}
-kable(tab17, col.names = c("Year", "Records", "Yes/Current", "Quit/Former",  "Never", "Not Asked/Unknown", "Null or Uncategorized"), align = 'c', format.args = list(big.mark = ","))
-```
-
-## Table 18: PRO_Responses: Surveys and Questions included
-
-This table summarizes responses to the behavioral and social survey questions based on which screening surveys each data partner has included.
 
 ```{r tab18_res,echo = F, include=T}
 tab18 <- run_query(
@@ -1184,9 +1061,6 @@ tab18_order <- tab18[order(tab18$pro_id, tab18$question_id),]
 	  
 ```
 
-```{r tab18_disp, echo = F, include=T}
-kable(tab18_order, col.names = c("PRO_ID", "QUESTION_ID", "Number of Records", "Minimum Value", "Maximum Value", "Response Number Null", "Response Text Null", "Different values for Response Number and Text"), row.names = F, align = 'c', format.args = list(big.mark = ","))
-```
 
 ```{r tabScreenYear,echo = F, include=T}
 
@@ -1454,8 +1328,6 @@ if (!is.data.frame(tableQuestionsExists) || nrow(tableQuestionsExists)==0) {
 
 ```
 
-## Table 19: PHQ-2 Response Detail
-
 ```{r tab19_res, echo = F, include=T}
 tab19 <- run_query(
         paste0("select question_id,
@@ -1477,11 +1349,6 @@ tab19 <- run_query(
 tab19$pct_high_response <- round(100*tab19$n_high_scores/tab19$nresponse,1)
 ```
 
-```{r tab19_disp, echo = F, include=T}
-kable(tab19, col.names = c("Question ID", "# of Responses", "# Null Responses", "# of Duplicates",  "# of Encounters", "# of Patients", "Minimum Response Value", "Maximum Response Value", "Average Response Value", "# High Responses", "% High Responses"), align = 'c', format.args = list(big.mark = ","))
-```
-
-## Table 20: PHQ-2 Number of Encounters and Percent of Encounters Screened by Year - All Encounter Types (`r tab_screen_years[[1]]` - Present)
 
 ```{r tab20_res, echo = F, include=T }
 tab20_screen <- run_query( 
@@ -1574,12 +1441,7 @@ tab20_total_wide$combined_5 <- paste0(format(tab20_total_wide$screen_5, big.mark
 tab20_final <- tab20_total_wide[c("question_id","combined_1", "combined_2", "combined_3", "combined_4", "combined_5")]
 ```
 
-```{r tab20_disp, echo = F, include=T}
-kable(tab20_final, col.names = c("Question ID", paste0("# (%) Screened ", tab_screen_years[[1]]), paste0("# (%) Screened ", tab_screen_years[[2]]), paste0("# (%) Screened ", tab_screen_years[[3]]),  paste0("# (%) Screened ", tab_screen_years[[4]]), paste0("# (%) Screened ", tab_screen_years[[5]])), row.names = F, align = 'c', format.args = list(big.mark = ","))
-```
 
-
-## Table 21: PHQ-2 Number of Encounters and Percent of Encounters Screened by Year - Ambulatory Encounters Only (`r tab_screen_years[[1]]` - Present)
 
 ```{r tab21_res, echo = F, include=T }
 
@@ -1677,11 +1539,7 @@ tab21_total_wide$combined_5 <- paste0(format(tab21_total_wide$screen_5, big.mark
 tab21_final <- tab21_total_wide[c("question_id","combined_1", "combined_2", "combined_3", "combined_4", "combined_5")]
 ```
 
-```{r tab21_disp, echo = F, include=T}
-kable(tab21_final, col.names = c("Question ID", paste0("# (%) Screened ", tab_screen_years[[1]]), paste0("# (%) Screened ", tab_screen_years[[2]]), paste0("# (%) Screened ", tab_screen_years[[3]]),  paste0("# (%) Screened ", tab_screen_years[[4]]), paste0("# (%) Screened ", tab_screen_years[[5]])), row.names = F, align = 'c', format.args = list(big.mark = ","))
-```
 
-## Table 22: PHQ-2 Number of Patients and Percent of Patients Screened by Year - All Encounter Types (`r tab_screen_years[[1]]` - Present)
 
 ```{r tab22_res, echo = F, include=T }
 
@@ -1782,12 +1640,6 @@ tab22_total_wide$combined_5 <- paste0(format(tab22_total_wide$screen_5, big.mark
 tab22_final <- tab22_total_wide[c("question_id","combined_1", "combined_2", "combined_3", "combined_4", "combined_5")]
 ```
 
-```{r tab22_disp, echo = F, include=T}
-
-kable(tab22_final, col.names = c("Question ID", paste0("# (%) Screened ", tab_screen_years[[1]]), paste0("# (%) Screened ", tab_screen_years[[2]]), paste0("# (%) Screened ", tab_screen_years[[3]]),  paste0("# (%) Screened ", tab_screen_years[[4]]), paste0("# (%) Screened ", tab_screen_years[[5]])), row.names = F, align = 'c', format.args = list(big.mark = ","))
-```
-
-## Table 23: PHQ-2 Number of Patients and Percent of Patients Screened by Year - Ambulatory Encounters Only (`r tab_screen_years[[1]]` - Present)
 
 ```{r tab23_res,echo = F, include=T }
 
@@ -1886,12 +1738,7 @@ tab23_final <- tab23_total_wide[c("question_id","combined_1", "combined_2", "com
 
 ```
 
-```{r tab23_disp, echo = F, include=T}
 
-kable(tab23_final, col.names = c("Question ID", paste0("# (%) Screened ", tab_screen_years[[1]]), paste0("# (%) Screened ", tab_screen_years[[2]]), paste0("# (%) Screened ", tab_screen_years[[3]]),  paste0("# (%) Screened ", tab_screen_years[[4]]), paste0("# (%) Screened ", tab_screen_years[[5]])), row.names = F, align = 'c', format.args = list(big.mark = ","))
-```
-
-## Table 24: PHQ-9 Response Detail
 
 ```{r tab24_res, echo = F, include=T}
 tab24 <- run_query(
@@ -1915,11 +1762,7 @@ tab24 <- run_query(
 tab24$pct_high_response <- round(100*tab24$n_high_scores/tab24$nresponse,1)
 ```
 
-```{r tab24_disp, echo = F, include=T}
-kable(tab24, col.names = c("Question ID", "# of Responses", "# Null Responses", "# of Duplicates",  "# of Encounters", "# of Patients", "Minimum Response Value", "Maximum Response Value", "Average Response Value", "# High Responses", "% High Responses"), align = 'c', format.args = list(big.mark = ","))
-```
 
-## Table 25: PHQ-9 Question Text Table
 
 ```{r tab25, echo = F, include=T }
 tab25 <- run_query( 
@@ -1945,14 +1788,6 @@ rowsum$Total <- 100
 tab25_total <-rbind(tab25, rowsum)
 ```
 
-```{r tab25_disp, echo = F, include=T}
-knitr::kable(tab25_total, 
-             col.names = c('Response #',"Percent"), 
-             row.names=T, 
-             format.args = list(big.mark = ","))
-```
-
-## Table 26: PHQ-9 Number of Encounters and Percent of Encounters Screened by Year - All Encounter Types (`r tab_screen_years[[1]]` - Present)
 
 ```{r tab26_res, echo = F, include=T }
 tab26_screen <- run_query( 
@@ -2045,13 +1880,6 @@ tab26_total_wide$combined_5 <- paste0(format(tab26_total_wide$screen_5, big.mark
 tab26_final <- tab26_total_wide[c("question_id","combined_1", "combined_2", "combined_3", "combined_4", "combined_5")]
 ```
 
-
-```{r tab26_disp, echo = F, include=T}
-kable(tab26_final, col.names = c("Question ID", paste0("# (%) Screened ", tab_screen_years[[1]]), paste0("# (%) Screened ", tab_screen_years[[2]]), paste0("# (%) Screened ", tab_screen_years[[3]]),  paste0("# (%) Screened ", tab_screen_years[[4]]), paste0("# (%) Screened ", tab_screen_years[[5]])), row.names = F, align = 'c', format.args = list(big.mark = ","))
-```
-
-
-## Table 27: PHQ-9 Number of Encounters and Percent of Encounters Screened by Year - Ambulatory Encounters Only (`r tab_screen_years[[1]]` - Present)
 
 ```{r tab27_res, echo = F, include=T }
 
@@ -2149,11 +1977,7 @@ tab27_total_wide$combined_5 <- paste0(format(tab27_total_wide$screen_5, big.mark
 tab27_final <- tab27_total_wide[c("question_id","combined_1", "combined_2", "combined_3", "combined_4", "combined_5")]
 ```
 
-```{r tab27_disp, echo = F, include=T}
-kable(tab27_final, col.names = c("Question ID", paste0("# (%) Screened ", tab_screen_years[[1]]), paste0("# (%) Screened ", tab_screen_years[[2]]), paste0("# (%) Screened ", tab_screen_years[[3]]),  paste0("# (%) Screened ", tab_screen_years[[4]]), paste0("# (%) Screened ", tab_screen_years[[5]])), row.names = F, align = 'c', format.args = list(big.mark = ","))
-```
 
-## Table 28: PHQ-9 Number of Patients and Percent of Patients Screened by Year - All Encounter Types (`r tab_screen_years[[1]]` - Present)
 
 ```{r tab28_res, echo = F, include=T }
 
@@ -2254,12 +2078,7 @@ tab28_total_wide$combined_5 <- paste0(format(tab28_total_wide$screen_5, big.mark
 tab28_final <- tab28_total_wide[c("question_id","combined_1", "combined_2", "combined_3", "combined_4", "combined_5")]
 ```
 
-```{r tab28_disp, echo = F, include=T}
 
-kable(tab28_final, col.names = c("Question ID", paste0("# (%) Screened ", tab_screen_years[[1]]), paste0("# (%) Screened ", tab_screen_years[[2]]), paste0("# (%) Screened ", tab_screen_years[[3]]),  paste0("# (%) Screened ", tab_screen_years[[4]]), paste0("# (%) Screened ", tab_screen_years[[5]])), row.names = F, align = 'c', format.args = list(big.mark = ","))
-```
-
-## Table 29: PHQ-9 Number of Patients and Percent of Patients Screened by Year - Ambulatory Encounters Only (`r tab_screen_years[[1]]` - Present)
 
 ```{r tab29_res,echo = F, include=T }
 
@@ -2358,12 +2177,7 @@ tab29_final <- tab29_total_wide[c("question_id","combined_1", "combined_2", "com
 
 ```
 
-```{r tab29_disp, echo = F, include=T}
 
-kable(tab29_final, col.names = c("Question ID", paste0("# (%) Screened ", tab_screen_years[[1]]), paste0("# (%) Screened ", tab_screen_years[[2]]), paste0("# (%) Screened ", tab_screen_years[[3]]),  paste0("# (%) Screened ", tab_screen_years[[4]]), paste0("# (%) Screened ", tab_screen_years[[5]])), row.names = F, align = 'c', format.args = list(big.mark = ","))
-```
-
-## Table 30: GAD-7 Response Detail
 
 ```{r tab30_res, echo = F, include=T}
 tab30 <- run_query(
@@ -2386,11 +2200,7 @@ tab30 <- run_query(
 tab30$pct_high_response <- round(100*tab30$n_high_scores/tab30$nresponse,1)
 ```
 
-```{r tab30_disp, echo = F, include=T}
-kable(tab30, col.names = c("Question ID", "# of Responses", "# Null Responses", "# of Duplicates",  "# of Encounters", "# of Patients", "Minimum Response Value", "Maximum Response Value", "Average Response Value", "# High Responses", "% High Responses (>3 for 1-7 or >15 total)"), align = 'c', format.args = list(big.mark = ","))
-```
 
-## Table 31: GAD-7 Number of Encounters and Percent of Encounters Screened by Year - All Encounter Types (`r tab_screen_years[[1]]` - Present)
 
 ```{r tab31_res, echo = F, include=T }
 tab31_screen <- run_query( 
@@ -2483,13 +2293,6 @@ tab31_total_wide$combined_5 <- paste0(format(tab31_total_wide$screen_5, big.mark
 tab31_final <- tab31_total_wide[c("question_id","combined_1", "combined_2", "combined_3", "combined_4", "combined_5")]
 ```
 
-
-```{r tab31_disp, echo = F, include=T}
-kable(tab31_final, col.names = c("Question ID", paste0("# (%) Screened ", tab_screen_years[[1]]), paste0("# (%) Screened ", tab_screen_years[[2]]), paste0("# (%) Screened ", tab_screen_years[[3]]),  paste0("# (%) Screened ", tab_screen_years[[4]]), paste0("# (%) Screened ", tab_screen_years[[5]])), row.names = F, align = 'c', format.args = list(big.mark = ","))
-```
-
-
-## Table 32: GAD-7 Number of Encounters and Percent of Encounters Screened by Year - Ambulatory Encounters Only (`r tab_screen_years[[1]]` - Present)
 
 ```{r tab32_res, echo = F, include=T }
 
@@ -2587,11 +2390,6 @@ tab32_total_wide$combined_5 <- paste0(format(tab32_total_wide$screen_5, big.mark
 tab32_final <- tab32_total_wide[c("question_id","combined_1", "combined_2", "combined_3", "combined_4", "combined_5")]
 ```
 
-```{r tab32_disp, echo = F, include=T}
-kable(tab32_final, col.names = c("Question ID", paste0("# (%) Screened ", tab_screen_years[[1]]), paste0("# (%) Screened ", tab_screen_years[[2]]), paste0("# (%) Screened ", tab_screen_years[[3]]),  paste0("# (%) Screened ", tab_screen_years[[4]]), paste0("# (%) Screened ", tab_screen_years[[5]])), row.names = F, align = 'c', format.args = list(big.mark = ","))
-```
-
-## Table 33: GAD-7 Number of Patients and Percent of Patients Screened by Year - All Encounter Types (`r tab_screen_years[[1]]` - Present)
 
 ```{r tab33_res, echo = F, include=T }
 
@@ -2692,12 +2490,6 @@ tab33_total_wide$combined_5 <- paste0(format(tab33_total_wide$screen_5, big.mark
 tab33_final <- tab33_total_wide[c("question_id","combined_1", "combined_2", "combined_3", "combined_4", "combined_5")]
 ```
 
-```{r tab33_disp, echo = F, include=T}
-
-kable(tab33_final, col.names = c("Question ID", paste0("# (%) Screened ", tab_screen_years[[1]]), paste0("# (%) Screened ", tab_screen_years[[2]]), paste0("# (%) Screened ", tab_screen_years[[3]]),  paste0("# (%) Screened ", tab_screen_years[[4]]), paste0("# (%) Screened ", tab_screen_years[[5]])), row.names = F, align = 'c', format.args = list(big.mark = ","))
-```
-
-## Table 34: GAD-7 Number of Patients and Percent of Patients Screened by Year - Ambulatory Encounters Only (`r tab_screen_years[[1]]` - Present)
 
 ```{r tab34_res,echo = F, include=T }
 
@@ -2796,12 +2588,6 @@ tab34_final <- tab34_total_wide[c("question_id","combined_1", "combined_2", "com
 
 ```
 
-```{r tab34_disp, echo = F, include=T}
-
-kable(tab34_final, col.names = c("Question ID", paste0("# (%) Screened ", tab_screen_years[[1]]), paste0("# (%) Screened ", tab_screen_years[[2]]), paste0("# (%) Screened ", tab_screen_years[[3]]),  paste0("# (%) Screened ", tab_screen_years[[4]]), paste0("# (%) Screened ", tab_screen_years[[5]])), row.names = F, align = 'c', format.args = list(big.mark = ","))
-```
-
-## Table 35: PRAPARE Response Detail
 
 ```{r tab35_res, echo = F, include=T}
 tab35 <- run_query(
@@ -2817,11 +2603,6 @@ tab35 <- run_query(
 
 ```
 
-```{r tab35_disp, echo = F, include=T}
-kable(tab35, col.names = c("Question ID", "# of Responses", "# Null Responses", "# of Duplicates",  "# of Encounters", "# of Patients"), align = 'c', format.args = list(big.mark = ","))
-```
-
-## Table 36: PRAPARE Number of Encounters and Percent of Encounters Screened by Year - All Encounter Types (`r tab_screen_years[[1]]` - Present)
 
 ```{r tab36_res, echo = F, include=T }
 tab36_screen <- run_query( 
@@ -2915,12 +2696,6 @@ tab36_final <- tab36_total_wide[c("question_id","combined_1", "combined_2", "com
 ```
 
 
-```{r tab36_disp, echo = F, include=T}
-kable(tab36_final, col.names = c("Question ID", paste0("# (%) Screened ", tab_screen_years[[1]]), paste0("# (%) Screened ", tab_screen_years[[2]]), paste0("# (%) Screened ", tab_screen_years[[3]]),  paste0("# (%) Screened ", tab_screen_years[[4]]), paste0("# (%) Screened ", tab_screen_years[[5]])), row.names = F, align = 'c', format.args = list(big.mark = ","))
-```
-
-
-## Table 37: PRAPARE Number of Encounters and Percent of Encounters Screened by Year - Ambulatory Encounters Only (`r tab_screen_years[[1]]` - Present)
 
 ```{r tab37_res, echo = F, include=T }
 
@@ -3018,11 +2793,6 @@ tab37_total_wide$combined_5 <- paste0(format(tab37_total_wide$screen_5, big.mark
 tab37_final <- tab37_total_wide[c("question_id","combined_1", "combined_2", "combined_3", "combined_4", "combined_5")]
 ```
 
-```{r tab37_disp, echo = F, include=T}
-kable(tab37_final, col.names = c("Question ID", paste0("# (%) Screened ", tab_screen_years[[1]]), paste0("# (%) Screened ", tab_screen_years[[2]]), paste0("# (%) Screened ", tab_screen_years[[3]]),  paste0("# (%) Screened ", tab_screen_years[[4]]), paste0("# (%) Screened ", tab_screen_years[[5]])), row.names = F, align = 'c', format.args = list(big.mark = ","))
-```
-
-## Table 38: PRAPARE Number of Patients and Percent of Patients Screened by Year - All Encounter Types (`r tab_screen_years[[1]]` - Present)
 
 ```{r tab38_res, echo = F, include=T }
 
@@ -3123,12 +2893,6 @@ tab38_total_wide$combined_5 <- paste0(format(tab38_total_wide$screen_5, big.mark
 tab38_final <- tab38_total_wide[c("question_id","combined_1", "combined_2", "combined_3", "combined_4", "combined_5")]
 ```
 
-```{r tab38_disp, echo = F, include=T}
-
-kable(tab38_final, col.names = c("Question ID", paste0("# (%) Screened ", tab_screen_years[[1]]), paste0("# (%) Screened ", tab_screen_years[[2]]), paste0("# (%) Screened ", tab_screen_years[[3]]),  paste0("# (%) Screened ", tab_screen_years[[4]]), paste0("# (%) Screened ", tab_screen_years[[5]])), row.names = F, align = 'c', format.args = list(big.mark = ","))
-```
-
-## Table 39: PRAPARE Number of Patients and Percent of Patients Screened by Year - Ambulatory Encounters Only (`r tab_screen_years[[1]]` - Present)
 
 ```{r tab39_res,echo = F, include=T }
 
@@ -3227,12 +2991,6 @@ tab39_final <- tab39_total_wide[c("question_id","combined_1", "combined_2", "com
 
 ```
 
-```{r tab39_disp, echo = F, include=T}
-
-kable(tab39_final, col.names = c("Question ID", paste0("# (%) Screened ", tab_screen_years[[1]]), paste0("# (%) Screened ", tab_screen_years[[2]]), paste0("# (%) Screened ", tab_screen_years[[3]]),  paste0("# (%) Screened ", tab_screen_years[[4]]), paste0("# (%) Screened ", tab_screen_years[[5]])), row.names = F, align = 'c', format.args = list(big.mark = ","))
-```
-
-## Table 40: PRAPARE Question 7 Text Table
 
 ```{r tab40, echo = F, include=T }
 tab40 <- run_query( 
@@ -3258,14 +3016,6 @@ rowsum$Total <- 100
 tab40_total <-rbind(tab40, rowsum)
 ```
 
-```{r tab40_disp, echo = F, include=T}
-knitr::kable(tab40_total, 
-             col.names = c('Response #',"Percent"), 
-             row.names=T, 
-             format.args = list(big.mark = ","))
-```
-
-## Table 41: PRAPARE Question 8 Text Table
 
 ```{r tab41, echo = F, include=T }
 tab41 <- run_query( 
@@ -3291,14 +3041,6 @@ rowsum$Total <- 100
 tab41_total <-rbind(tab41, rowsum)
 ```
 
-```{r tab41_disp, echo = F, include=T}
-knitr::kable(tab41_total, 
-             col.names = c('Response #',"Percent"), 
-             row.names=T, 
-             format.args = list(big.mark = ","))
-```
-
-## Table 42: PRAPARE Question 14 Text Table
 
 ```{r tab42, echo = F, include=T }
 tab42 <- run_query( 
@@ -3324,12 +3066,400 @@ rowsum$Total <- 100
 tab42_total <-rbind(tab42, rowsum)
 ```
 
+
+## Data Quality Report Results
+
+## QA Alerts
+
+```{r validationMessage Output, echo = F}
+if(nrow(QA_Alert_Messages)==0) {QA_Alert_Messages[nrow(QA_Alert_Messages) + 1,] = 'No specific alerts noted'}
+
+knitr::kable(QA_Alert_Messages, row.names = FALSE)
+```
+
+
+\pagebreak
+
+## Table 1. Records, Patients, Encounters, and Date Ranges by Table
+
+This table contains summary counts and date ranges by table. Distinct encounters and patients are shown for applicable tables. Date ranges should be used to compare data time windows between tables.
+
+```{r tab1_disp, echo = F, include=T}
+kable(tab1_all, col.names = c("Table", "Records", "Patients", "Encounters", "Date Field", "Min Date", "Max Date"), format.args = list(big.mark = ",")) 
+  
+```
+
+## Table 2: Missingness Variables across P2 Tables
+
+This table contains record counts for null and unknown values across P2 tables.
+ 
+```{r tab2_disp, echo = F, include=T}
+kable(tab2_all, col.names = c("Table", "Variable", "Null Records", "Percent of Records Null", "Unknown Records", "Percent of Records Unknown"), digits = 2, format.args = list(big.mark = ","))
+
+
+```
+
+## Examination of the LAB_RESULTS Table 
+
+The following tables explore the contents of the LAB_RESULTS table with a focus on trends over time,CHORDS priority lab results, and most common types of lab tests. 
+
+
+## Table 3: Annual Trends in the Total Number of Recorded Lab Tests, the Number of Patients Tested and the Percent Change from the Previous Year, by Calendar Year
+
+This table displays trends in the number of recorded lab tests and the number of unique patients tested by year. The percent change in both count values is included to identify unexpected temporal fluctuations. 
+
+
+```{r tab3_disp, echo = F, include=T}
+kable(tab3_ord, col.names = c("Year", "Number of Recorded Lab Tests", "Percent Change From Previous Year", "Number of Patients Tested", "Percent Change From Previous Year"), format.args = list(big.mark = ","), align = 'c')
+```
+
+
+## Table 4: CHORDS Priority Lab Tests - Number/Percentage of Tests, Number/Percentage of Patients Tested, Mean Result Values and Result Ranges, by Select TEST_TYPE Values 
+
+This table illustrates the number (and percent) of priority lab test records including the percent of all lab test records , as well as the number (and percent)  of unique patients tested for select TEST_TYPE values. 
+
+```{r tab4_disp, echo = F, include=T}
+
+kable(tab4 [c("test_type", "nrows", "pct_rec", "npats", "pct_pat", "avg_resval", "min_resval", "max_resval")], col.names = c("Test Type", "Number of Recorded Lab Tests", "Percentage of All Recorded Tests", "Number of Unique Patients Tested", "Percentage of All Patients", "Mean Result Value", "Minimum Result Value", "Maximum Result Value"), digits = 2, align = 'c', format.args = list(big.mark = ",")) 
+```
+
+## Figures 1a-1i: Temporal Trends in the Number of CHORDS Priority Lab Tests, by Select TEST_TYPE Values
+
+These figures shows temporal trends in the number of records for CHORDS priority lab tests.
+
+```{r fig1_res, fig.height=3.22, fig.width=7, echo = F, include=T, dpi=500}
+
+suppressWarnings(invisible(lapply(fig1Figures, print)))
+```
+
+## Table 5: Summary of the Ten Most Common Lab Tests - Number/Percentage of Tests and Number/Percentage of Patients Tested, by Select BATTERY_CD Values
+
+This table illustrates the number (and percent) of the data partner's ten most common lab tests and the number (and percent) of unique patients tested with the ten most common lab tests, by the BATTERY_CD field (which captures site-specific lab test names), the percentage of records this represents, and the number and percent of patients in the LAB_RESULTS table who have these results. 
+
+
+```{r tab5_disp, echo = F, include=T}
+kable(tab5_sub, col.names = c("BATTERY_CD", "Number of Recorded Lab Tests", "Percentage of All Lab Tests", "Number of Patients Tested", "Percentage of All Patients with a Lab Test"), format.args = list(big.mark = ","))
+```
+
+## Examination of the PRESCRIBING Table (Medication Orders and Prescriptions Combined)
+
+The following tables explore the contents of the PRESCRIBING table with a focus on trends over time and most common types of medications ordered. 
+
+## Table 6: Annual Trends in Prescribing Data - the Total Number of Recorded Medication Orders, the Percent Change from the Previous Year, the Total Number of Patients and the Mean, Maximum and Minimum Numbers of Orders & Prescriptions per Patient
+
+This table displays trends in PRESCRIBING record volume over time as well as patient volume represented in the table. PRESCRIBING records are attributed to a year based on RX_ORDER_DATE.
+ 
+```{r tab6_disp, echo = F, include=T}
+kable(tab6_all, col.names = c("Year", "Total Number of Prescriptions", "Percent Change From Last Year", "Total Number of Patients", "Median number of Prescriptions per patient", "Minimum Number of Prescriptions Per Patient", "Maximum Number of Prescriptions Per Patient"), align = "c" , format.args = list(big.mark = ","))
+```
+
+## Table 7: Summary of the Ten Most Common Medications by Order Type
+
+This table displays the top ten most common orders including count of records and patients. 
+
+```{r tab7_disp, echo = F, include=T}
+kable(tab7, col.names = c("Medication Name (GENERIC_MED_NAME)", "Records", "Patients", "Average Days Supply", "Average Quantity"), format.args = list(big.mark = ","))
+```
+
+## Examination of the PROCEDURES Table 
+
+The following tables explore the contents of the PROCEDURES table with a focus on trends over time and most common types of procedures. 
+
+## Table 8: Annual Trends in the Total Number of Recorded Procedures, the Mean Number of Encounters, the Mean Number of Patients and the Percent Change from the Previous Year, by Calendar Year
+
+This table examines the volume of procedures over time and the number of encounters and patients with represented in the PROCEDURES table. Average number of procedures per encounter, and per patient, are calculated to compare procedure volume trends over time.
+
+```{r tab8_dis, echo = F, include=T}
+kable(tab8_add, col.names = c("Year", "Total Number of Recorded Procedures", "Percent Change from Previous Year", "Total Number of Encounters with Procedures", "Total Number of Patients with Procedures", "Median Number of Procedures per Encounter (Min, Max)", "Median Number of Procedures per Patient (Min, Max)"),  align= "c", format.args = list(big.mark = ","))
+```
+
+## Table 9:  Total Number and Percent of Recorded Encounters, Diagnoses and Procedures, by Encounter Type
+
+This table compares the distribution of procedures, diagnoses and encounters by encounter type. Average diagnosis and procedure counts per encounter are calculated to compare diagnosis and procedure volume by encounter type.
+
+```{r tab9_disp, echo = F, include=T}
+kable(tab9_all[1:7, c( "enctype", "nrows_enct", "pct_enct", "nrows_enct", "pct_diag", "nrows_px", "pct_px")], col.names = c("Encounter Type", "Number of Encounters", "Percent of Total Encounters", "Number of Diagnoses", "Percent of Total Diagnoses", "Number of Procedures", "Percent of Total Procedures"), digits = 2, format.args = list(big.mark = ","))
+```
+
+\pagebreak
+
+## Fig 9a: Summary of Encounters Types
+
+```{r fig9a_dist, fig.height=3.25, fig.width=7, echo = F, include=T, dpi=500}
+suppressWarnings(invisible(lapply(fig9aFigures, print)))
+
+```
+
+\pagebreak
+
+## Fig 9b: Summary of Diagnosis Encounter Types
+
+```{r fig9b_dist, fig.height=3.25, fig.width=7, echo = F, include=T, dpi=500}
+
+suppressWarnings(invisible(lapply(fig9bFigures, print)))
+```
+
+\pagebreak
+
+## Table 10: Summary of the Ten Most Common Procedures - Procedure Code, Procedure Type, Total Number of Recorded Procedures and Total Number of Recorded Patients, by All or Ambulatory Encounter Type 
+
+This table includes information on the ten most common procedures recorded in your PROCEDURE table.  Data on procedure codes, types, counts and patients are presented for all encounters and for ambulatory only encounters (ENCTYPE='AV'). 
+
+```{r tab10_disp, echo = F, include=T}
+kable(tab10_all, col.names = c("Procedure Code", "Procedure Type", "Number of Recorded Procedures", "Number of Patients", "Procedure Code for AV", "Procedure Type for AV", "Number of Recorded Procedures for AV", "Number of Patients for AV"), align = 'c', format.args = list(big.mark = ","))
+```
+
+## Table 11: Summary of the Ten Most Common Procedures by Procedure Code Type, Total Number of Recorded Procedures and Total Number of Recorded Patients 
+
+This table includes information on the ten most common procedures recorded in your PROCEDURE table.  Data on procedure codes, counts and patients are presented for CPT, HCPCS, and other code types. 
+
+```{r tab11_disp, echo = F, include=T}
+#if and else statements are used to determine if the respective table has any
+#rows. If not, then an error message is written indicating so.
+if (nrow(tab11_pxc4) != 0){
+  kable(tab11_pxc4, col.names = c("Procedure", "Records", "Patients"), caption = "Procedure Code Type = C4", format.args = list(big.mark = ","))
+} else {
+  cat(noquote("Table had zero rows.  PX_CODETYPE = C4 likely isn't a category for this variable.\n"))
+} 
+if (nrow(tab11_pxh4) != 0){
+  kable(tab11_pxh4, col.names = c("Procedure", "Records", "Patients"), caption = "Procedure Code Type = H4", format.args = list(big.mark = ","))
+} else {
+  cat(noquote("Table had zero rows.  PX_CODETYPE = H4 likely isn't a category for this variable.\n"))
+} 
+if (nrow(tab11_px_oth) != 0){
+  kable(tab11_px_oth, col.names = c("Procedure", "Records", "Patients"), caption = "Procedure Code Type = 09, 10, 11, RV, LO, OT", format.args = list(big.mark = ","))
+} else {
+  cat(noquote("Table had zero rows.  PX_CODETYPE = 09, 10, 11, RV, LO, or OT likely aren't categories for this variable.\n"))
+} 
+```
+
+
+## Examination of the PROVIDER_SPECIALTY Table
+
+The following tables explore the contents of the PROVIDER_SPECIALTY table with a focus on demographic data and representativeness of providers across tables.  Note that in some systems providers can be listed multiple times with multiple provider types/specialties. 
+
+## Table 12: Number and Percent of Providers represented in ENCOUNTERS, DIAGNOSIS, LAB_RESULTS, PRESCRIBING, AND PROCEDURES Tables 
+
+This table includes information on the number and percent of providers represented in various CHORDS VDW tables.
+
+```{r tab12_disp, echo = F, include=T}
+kable(tab12_all, col.names = c("Table", "Number of Providers*", "Percent of All Providers"), digits = 2, format.args = list(big.mark = ","))
+```
+*Excludes Provider = 'Unknown'
+
+## Table 13: Number and Percent of Providers by Specialty
+
+This table includes information on the distribution of providers by specialty.
+
+```{r tab13_disp, echo = F, include=T}
+kable(tab13, col.names = c("Specialty Abbreviation", "Specialty", "Number of Providers", "Percent of All Providers"), digits = 2, format.args = list(big.mark = ","))
+```
+
+## Table 14: Number and Percent of Provider by Provider Type 
+
+This table includes information on the distribution of providers by type.
+
+```{r tab14_disp, echo = F, include=T}
+kable(tab14, col.names = c("Provider Type Code", "Provider Type Description", "Number of Providers", "Percent of All Providers"), digits = 2, align = 'l', row.names = F, format.args = list(big.mark = ","))
+```
+
+## Table 15: Annual Trends in Self-Reported Tobacco Use
+
+This table includes information on the distribution of SOCIAL_HISTORY records by TOBACCO_USER value.
+
+```{r tab15_disp, echo = F, include=T}
+kable(tab15, col.names = c("Year", "Records", "Yes/Current (%)", "Infrequent(%) ", "Quit/Former (%)", "Passive/Second Hand Smoke Exposure (%)", "Never (%)", "Not Asked/Unknown (%)", "Null or Uncategorized"), align = 'c', format.args = list(big.mark = ","))
+```
+
+## Table 16: Annual Trends in Self-Reported Alcohol Use
+
+This table includes information on the distribution of SOCIAL_HISTORY records by ALCOHOL_USER value.
+
+```{r tab16_disp, echo = F, include=T}
+kable(tab16, col.names = c("Year", "Records", "Yes/Current", "Quit/Former",  "Never", "Not Asked/Unknown", "Null or Uncategorized"), align = 'c', format.args = list(big.mark = ","))
+```
+
+## Table 17: Annual Trends in Self-Reported Illicit Drug Use
+
+This table includes information on the distribution of SOCIAL_HISTORY records by ILL_DRUG_USER value.
+
+```{r tab17_disp, echo = F, include=T}
+kable(tab17, col.names = c("Year", "Records", "Yes/Current", "Quit/Former",  "Never", "Not Asked/Unknown", "Null or Uncategorized"), align = 'c', format.args = list(big.mark = ","))
+```
+
+## Table 18: PRO_Responses: Surveys and Questions included
+
+This table summarizes responses to the behavioral and social survey questions based on which screening surveys each data partner has included.
+
+```{r tab18_disp, echo = F, include=T}
+kable(tab18_order, col.names = c("PRO_ID", "QUESTION_ID", "Number of Records", "Minimum Value", "Maximum Value", "Response Number Null", "Response Text Null", "Different values for Response Number and Text"), row.names = F, align = 'c', format.args = list(big.mark = ","))
+```
+
+## Table 19: PHQ-2 Response Detail
+
+```{r tab19_disp, echo = F, include=T}
+kable(tab19, col.names = c("Question ID", "# of Responses", "# Null Responses", "# of Duplicates",  "# of Encounters", "# of Patients", "Minimum Response Value", "Maximum Response Value", "Average Response Value", "# High Responses", "% High Responses"), align = 'c', format.args = list(big.mark = ","))
+```
+
+## Table 20: PHQ-2 Number of Encounters and Percent of Encounters Screened by Year - All Encounter Types (`r tab_screen_years[[1]]` - Present)
+
+```{r tab20_disp, echo = F, include=T}
+kable(tab20_final, col.names = c("Question ID", paste0("# (%) Screened ", tab_screen_years[[1]]), paste0("# (%) Screened ", tab_screen_years[[2]]), paste0("# (%) Screened ", tab_screen_years[[3]]),  paste0("# (%) Screened ", tab_screen_years[[4]]), paste0("# (%) Screened ", tab_screen_years[[5]])), row.names = F, align = 'c', format.args = list(big.mark = ","))
+```
+
+
+## Table 21: PHQ-2 Number of Encounters and Percent of Encounters Screened by Year - Ambulatory Encounters Only (`r tab_screen_years[[1]]` - Present)
+
+```{r tab21_disp, echo = F, include=T}
+kable(tab21_final, col.names = c("Question ID", paste0("# (%) Screened ", tab_screen_years[[1]]), paste0("# (%) Screened ", tab_screen_years[[2]]), paste0("# (%) Screened ", tab_screen_years[[3]]),  paste0("# (%) Screened ", tab_screen_years[[4]]), paste0("# (%) Screened ", tab_screen_years[[5]])), row.names = F, align = 'c', format.args = list(big.mark = ","))
+```
+
+## Table 22: PHQ-2 Number of Patients and Percent of Patients Screened by Year - All Encounter Types (`r tab_screen_years[[1]]` - Present)
+
+
+```{r tab22_disp, echo = F, include=T}
+
+kable(tab22_final, col.names = c("Question ID", paste0("# (%) Screened ", tab_screen_years[[1]]), paste0("# (%) Screened ", tab_screen_years[[2]]), paste0("# (%) Screened ", tab_screen_years[[3]]),  paste0("# (%) Screened ", tab_screen_years[[4]]), paste0("# (%) Screened ", tab_screen_years[[5]])), row.names = F, align = 'c', format.args = list(big.mark = ","))
+```
+
+## Table 23: PHQ-2 Number of Patients and Percent of Patients Screened by Year - Ambulatory Encounters Only (`r tab_screen_years[[1]]` - Present)
+
+```{r tab23_disp, echo = F, include=T}
+
+kable(tab23_final, col.names = c("Question ID", paste0("# (%) Screened ", tab_screen_years[[1]]), paste0("# (%) Screened ", tab_screen_years[[2]]), paste0("# (%) Screened ", tab_screen_years[[3]]),  paste0("# (%) Screened ", tab_screen_years[[4]]), paste0("# (%) Screened ", tab_screen_years[[5]])), row.names = F, align = 'c', format.args = list(big.mark = ","))
+```
+
+## Table 24: PHQ-9 Response Detail
+
+```{r tab24_disp, echo = F, include=T}
+kable(tab24, col.names = c("Question ID", "# of Responses", "# Null Responses", "# of Duplicates",  "# of Encounters", "# of Patients", "Minimum Response Value", "Maximum Response Value", "Average Response Value", "# High Responses", "% High Responses"), align = 'c', format.args = list(big.mark = ","))
+```
+
+## Table 25: PHQ-9 Question Text Table
+
+```{r tab25_disp, echo = F, include=T}
+knitr::kable(tab25_total, 
+             col.names = c('Response #',"Percent"), 
+             row.names=T, 
+             format.args = list(big.mark = ","))
+```
+
+## Table 26: PHQ-9 Number of Encounters and Percent of Encounters Screened by Year - All Encounter Types (`r tab_screen_years[[1]]` - Present)
+
+
+```{r tab26_disp, echo = F, include=T}
+kable(tab26_final, col.names = c("Question ID", paste0("# (%) Screened ", tab_screen_years[[1]]), paste0("# (%) Screened ", tab_screen_years[[2]]), paste0("# (%) Screened ", tab_screen_years[[3]]),  paste0("# (%) Screened ", tab_screen_years[[4]]), paste0("# (%) Screened ", tab_screen_years[[5]])), row.names = F, align = 'c', format.args = list(big.mark = ","))
+```
+
+
+## Table 27: PHQ-9 Number of Encounters and Percent of Encounters Screened by Year - Ambulatory Encounters Only (`r tab_screen_years[[1]]` - Present)
+
+```{r tab27_disp, echo = F, include=T}
+kable(tab27_final, col.names = c("Question ID", paste0("# (%) Screened ", tab_screen_years[[1]]), paste0("# (%) Screened ", tab_screen_years[[2]]), paste0("# (%) Screened ", tab_screen_years[[3]]),  paste0("# (%) Screened ", tab_screen_years[[4]]), paste0("# (%) Screened ", tab_screen_years[[5]])), row.names = F, align = 'c', format.args = list(big.mark = ","))
+```
+
+## Table 28: PHQ-9 Number of Patients and Percent of Patients Screened by Year - All Encounter Types (`r tab_screen_years[[1]]` - Present)
+
+```{r tab28_disp, echo = F, include=T}
+
+kable(tab28_final, col.names = c("Question ID", paste0("# (%) Screened ", tab_screen_years[[1]]), paste0("# (%) Screened ", tab_screen_years[[2]]), paste0("# (%) Screened ", tab_screen_years[[3]]),  paste0("# (%) Screened ", tab_screen_years[[4]]), paste0("# (%) Screened ", tab_screen_years[[5]])), row.names = F, align = 'c', format.args = list(big.mark = ","))
+```
+
+## Table 29: PHQ-9 Number of Patients and Percent of Patients Screened by Year - Ambulatory Encounters Only (`r tab_screen_years[[1]]` - Present)
+```{r tab29_disp, echo = F, include=T}
+
+kable(tab29_final, col.names = c("Question ID", paste0("# (%) Screened ", tab_screen_years[[1]]), paste0("# (%) Screened ", tab_screen_years[[2]]), paste0("# (%) Screened ", tab_screen_years[[3]]),  paste0("# (%) Screened ", tab_screen_years[[4]]), paste0("# (%) Screened ", tab_screen_years[[5]])), row.names = F, align = 'c', format.args = list(big.mark = ","))
+```
+
+## Table 30: GAD-7 Response Detail
+```{r tab30_disp, echo = F, include=T}
+kable(tab30, col.names = c("Question ID", "# of Responses", "# Null Responses", "# of Duplicates",  "# of Encounters", "# of Patients", "Minimum Response Value", "Maximum Response Value", "Average Response Value", "# High Responses", "% High Responses (>3 for 1-7 or >15 total)"), align = 'c', format.args = list(big.mark = ","))
+```
+
+## Table 31: GAD-7 Number of Encounters and Percent of Encounters Screened by Year - All Encounter Types (`r tab_screen_years[[1]]` - Present)
+
+
+```{r tab31_disp, echo = F, include=T}
+kable(tab31_final, col.names = c("Question ID", paste0("# (%) Screened ", tab_screen_years[[1]]), paste0("# (%) Screened ", tab_screen_years[[2]]), paste0("# (%) Screened ", tab_screen_years[[3]]),  paste0("# (%) Screened ", tab_screen_years[[4]]), paste0("# (%) Screened ", tab_screen_years[[5]])), row.names = F, align = 'c', format.args = list(big.mark = ","))
+```
+
+
+## Table 32: GAD-7 Number of Encounters and Percent of Encounters Screened by Year - Ambulatory Encounters Only (`r tab_screen_years[[1]]` - Present)
+
+```{r tab32_disp, echo = F, include=T}
+kable(tab32_final, col.names = c("Question ID", paste0("# (%) Screened ", tab_screen_years[[1]]), paste0("# (%) Screened ", tab_screen_years[[2]]), paste0("# (%) Screened ", tab_screen_years[[3]]),  paste0("# (%) Screened ", tab_screen_years[[4]]), paste0("# (%) Screened ", tab_screen_years[[5]])), row.names = F, align = 'c', format.args = list(big.mark = ","))
+```
+
+## Table 33: GAD-7 Number of Patients and Percent of Patients Screened by Year - All Encounter Types (`r tab_screen_years[[1]]` - Present)
+
+```{r tab33_disp, echo = F, include=T}
+
+kable(tab33_final, col.names = c("Question ID", paste0("# (%) Screened ", tab_screen_years[[1]]), paste0("# (%) Screened ", tab_screen_years[[2]]), paste0("# (%) Screened ", tab_screen_years[[3]]),  paste0("# (%) Screened ", tab_screen_years[[4]]), paste0("# (%) Screened ", tab_screen_years[[5]])), row.names = F, align = 'c', format.args = list(big.mark = ","))
+```
+
+## Table 34: GAD-7 Number of Patients and Percent of Patients Screened by Year - Ambulatory Encounters Only (`r tab_screen_years[[1]]` - Present)
+
+```{r tab34_disp, echo = F, include=T}
+
+kable(tab34_final, col.names = c("Question ID", paste0("# (%) Screened ", tab_screen_years[[1]]), paste0("# (%) Screened ", tab_screen_years[[2]]), paste0("# (%) Screened ", tab_screen_years[[3]]),  paste0("# (%) Screened ", tab_screen_years[[4]]), paste0("# (%) Screened ", tab_screen_years[[5]])), row.names = F, align = 'c', format.args = list(big.mark = ","))
+```
+
+## Table 35: PRAPARE Response Detail
+
+```{r tab35_disp, echo = F, include=T}
+kable(tab35, col.names = c("Question ID", "# of Responses", "# Null Responses", "# of Duplicates",  "# of Encounters", "# of Patients"), align = 'c', format.args = list(big.mark = ","))
+```
+
+## Table 36: PRAPARE Number of Encounters and Percent of Encounters Screened by Year - All Encounter Types (`r tab_screen_years[[1]]` - Present)
+
+```{r tab36_disp, echo = F, include=T}
+kable(tab36_final, col.names = c("Question ID", paste0("# (%) Screened ", tab_screen_years[[1]]), paste0("# (%) Screened ", tab_screen_years[[2]]), paste0("# (%) Screened ", tab_screen_years[[3]]),  paste0("# (%) Screened ", tab_screen_years[[4]]), paste0("# (%) Screened ", tab_screen_years[[5]])), row.names = F, align = 'c', format.args = list(big.mark = ","))
+```
+
+
+## Table 37: PRAPARE Number of Encounters and Percent of Encounters Screened by Year - Ambulatory Encounters Only (`r tab_screen_years[[1]]` - Present)
+
+```{r tab37_disp, echo = F, include=T}
+kable(tab37_final, col.names = c("Question ID", paste0("# (%) Screened ", tab_screen_years[[1]]), paste0("# (%) Screened ", tab_screen_years[[2]]), paste0("# (%) Screened ", tab_screen_years[[3]]),  paste0("# (%) Screened ", tab_screen_years[[4]]), paste0("# (%) Screened ", tab_screen_years[[5]])), row.names = F, align = 'c', format.args = list(big.mark = ","))
+```
+
+## Table 38: PRAPARE Number of Patients and Percent of Patients Screened by Year - All Encounter Types (`r tab_screen_years[[1]]` - Present)
+```{r tab38_disp, echo = F, include=T}
+
+kable(tab38_final, col.names = c("Question ID", paste0("# (%) Screened ", tab_screen_years[[1]]), paste0("# (%) Screened ", tab_screen_years[[2]]), paste0("# (%) Screened ", tab_screen_years[[3]]),  paste0("# (%) Screened ", tab_screen_years[[4]]), paste0("# (%) Screened ", tab_screen_years[[5]])), row.names = F, align = 'c', format.args = list(big.mark = ","))
+```
+
+## Table 39: PRAPARE Number of Patients and Percent of Patients Screened by Year - Ambulatory Encounters Only (`r tab_screen_years[[1]]` - Present)
+
+```{r tab39_disp, echo = F, include=T}
+
+kable(tab39_final, col.names = c("Question ID", paste0("# (%) Screened ", tab_screen_years[[1]]), paste0("# (%) Screened ", tab_screen_years[[2]]), paste0("# (%) Screened ", tab_screen_years[[3]]),  paste0("# (%) Screened ", tab_screen_years[[4]]), paste0("# (%) Screened ", tab_screen_years[[5]])), row.names = F, align = 'c', format.args = list(big.mark = ","))
+```
+
+## Table 40: PRAPARE Question 7 Text Table
+```{r tab40_disp, echo = F, include=T}
+knitr::kable(tab40_total, 
+             col.names = c('Response #',"Percent"), 
+             row.names=T, 
+             format.args = list(big.mark = ","))
+```
+
+## Table 41: PRAPARE Question 8 Text Table
+```{r tab41_disp, echo = F, include=T}
+knitr::kable(tab41_total, 
+             col.names = c('Response #',"Percent"), 
+             row.names=T, 
+             format.args = list(big.mark = ","))
+```
+
+## Table 42: PRAPARE Question 14 Text Table
 ```{r tab42_disp, echo = F, include=T}
 knitr::kable(tab42_total, 
              col.names = c('Response #',"Percent"), 
              row.names=T, 
              format.args = list(big.mark = ","))
 ```
+
 
 ####Total program run time:
 ```{r calc_runtime, echo=FALSE}
