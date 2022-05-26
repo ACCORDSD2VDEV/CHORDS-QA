@@ -2761,8 +2761,7 @@ diagSumm  <- run_query(
                  as.is=c(TRUE,TRUE,TRUE,TRUE,TRUE,TRUE,TRUE,TRUE),
                  max=maxQryRows
                  )
-```
-/*
+
 Total rows in the dataset: **`r format(diagSumm$rowCnt, big.mark=",")`**\
 Total unique combinations of the primary key: **`r format(diagSumm$primKeyCnt, big.mark=",")`**\
 Total patients in the table: **`r format(diagSumm$personCnt, big.mark=",")`**\
@@ -2771,7 +2770,9 @@ Month and year of last diagnosis: **`r format( as.Date(diagSumm$lastDT),"%B %Y")
 **`r ifelse( diagSumm$rowCnt==diagSumm$primKeyCnt," ","*The table has duplicate rows, by enc_id dx adate diagprovider")`**\
 
 The following tables explore the contents of the DIAGNOSES table with a focus on trends over time and most common types of diagnoses.
-*/
+
+```
+
 ## Table 12. Annual Trends in the Total Number of Recorded Billing Diagnoses, the Mean Number of Encounters, the Mean Number of Patients and the Percent Change from the Previous Year, by Calendar Year
 
 This table examines the volume of diagnoses over time and the number of patients with encounters represented in the DIAGNOSES table. Average number of diagnoses per encounter, and per patient, are calculated to compare diagnosis volume trends over time.
@@ -3006,14 +3007,17 @@ vitalSumm  <- run_query(
                        ),
                  max=maxQryRows
                  )
-```
-
+		 
 Total rows in the dataset: **`r format(vitalSumm$rowCnt, big.mark=",")`**\
 Total unique combinations of the primary key: **`r format(vitalSumm$primKeyCnt, big.mark=",")`**\
 Total patients in the table: **`r format(vitalSumm$personCnt, big.mark=",")`**\
 Month and year of first record: **`r format(as.Date(vitalSumm$firstDT),"%B %Y")`**\
 Month and year of last record: **`r format(as.Date(vitalSumm$lastDT),"%B %Y")`**\
 **`r ifelse(vitalSumm$rowCnt==vitalSumm$primKeyCnt," ","*The table has duplicate rows, by person_id, measure_date, measure_time")`**\
+
+```
+
+
 
 
 ## Table 15. Vital Signs Summary
